@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password', 'role', 'institution', 'phone', 'token_quota', 'token_used', 'is_active'])]
+#[Fillable(['sso_user_id', 'sso_username', 'name', 'email', 'password', 'role', 'institution', 'phone', 'token_quota', 'token_used', 'is_active', 'last_sso_login_at'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -45,6 +45,7 @@ class User extends Authenticatable
             'token_quota' => 'integer',
             'token_used' => 'integer',
             'is_active' => 'boolean',
+            'last_sso_login_at' => 'datetime',
         ];
     }
 }

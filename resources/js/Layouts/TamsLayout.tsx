@@ -177,7 +177,8 @@ export default function TamsLayout({ children }: PropsWithChildren) {
                         method="post"
                         as="button"
                         className="grid size-10 place-items-center rounded-md border border-line bg-surface"
-                        aria-label="Keluar"
+                        aria-label="Kembali ke aplikasi utama"
+                        title="Kembali ke aplikasi utama"
                     >
                         <LogOut size={18} />
                     </Link>

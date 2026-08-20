@@ -15,6 +15,10 @@ class EnsureActiveUser
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
+            if (config('sso.enabled')) {
+                abort(403, 'Akun TAMS Anda sudah dinonaktifkan. Hubungi administrator.');
+            }
+
             return redirect()->route('login')->withErrors([
                 'email' => 'Akun Anda sudah dinonaktifkan. Hubungi administrator.',
             ]);

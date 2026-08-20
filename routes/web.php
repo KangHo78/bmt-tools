@@ -14,11 +14,24 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\StockAuditController;
 use App\Http\Controllers\UploadController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => auth()->check() ? to_route('dashboard') : to_route('login'));
 
-Route::middleware('auth')->group(function () {
+Route::get('/login', fn () => redirect()->away(config('sso.main_app_url')))
+    ->name('login');
+
+Route::post('/logout', function (Request $request) {
+    Auth::guard('web')->logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+
+    return redirect()->away(config('sso.main_app_url'));
+})->name('logout');
+
+Route::middleware(['auth', 'sso.group'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::get('/katalog', [CatalogController::class, 'index'])->name('catalog.index');
     Route::get('/katalog/{toolType}', [CatalogController::class, 'show'])->name('catalog.show');
@@ -88,5 +101,3 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
-
-require __DIR__.'/auth.php';
