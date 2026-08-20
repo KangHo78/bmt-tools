@@ -14,7 +14,7 @@ class ReportController extends Controller
         abort_unless(in_array($type, ['assets', 'loans', 'audits'], true), 404);
         [$headers, $rows] = match ($type) {
             'assets' => [['Kode Aset', 'Jenis', 'Status', 'Kondisi', 'Lokasi', 'Owner'], ToolUnit::with(['toolType', 'location'])->get()->map(fn ($x) => [$x->asset_code, $x->toolType->name, $x->status, $x->condition, $x->location?->name, $x->owner])],
-            'loans' => [['Transaksi', 'Peminjam', 'Area', 'Tujuan', 'Mulai', 'Tenggat', 'Status', 'Token'], Loan::with('user')->get()->map(fn ($x) => [$x->trx_no, $x->user->name, $x->usage_type, $x->purpose, $x->start_date, $x->due_date, $x->status, $x->tokens_used])],
+            'loans' => [['Transaksi', 'Peminjam', 'Area', 'Tujuan', 'Mulai', 'Tenggat', 'Status', 'Token'], Loan::with('borrower')->get()->map(fn ($x) => [$x->trx_no, $x->borrower->name, $x->usage_type, $x->purpose, $x->start_date, $x->due_date, $x->status, $x->tokens_used])],
             'audits' => [['Audit', 'Cakupan', 'Jadwal', 'Status', 'Diperiksa', 'Total', 'Catatan'], StockAudit::all()->map(fn ($x) => [$x->name, $x->scope, $x->scheduled_date, $x->status, $x->checked_units, $x->total_units, $x->reviewer_note])],
         };
 

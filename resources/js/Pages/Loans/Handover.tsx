@@ -65,7 +65,7 @@ export default function Handover({ loan }: { loan: Loan }) {
                     </h1>
                     <p className="mt-2 text-sm text-muted">
                         Pindai setiap label, periksa kelengkapan, lalu
-                        konfirmasi bersama {loan.user.name}.
+                        konfirmasi bersama {loan.borrower.name}.
                     </p>
                 </div>
                 <div className="space-y-4">
@@ -82,6 +82,7 @@ export default function Handover({ loan }: { loan: Loan }) {
                                     <p className="font-num text-xs text-muted">
                                         {item.tool_type.code}
                                     </p>
+                                    {item.physical_token && <p className="mt-2 inline-flex rounded bg-amber/15 px-2 py-1 font-num text-xs font-bold">Kepingan {item.physical_token.code}</p>}
                                     <div className="mt-3 flex flex-wrap gap-1">
                                         {item.tool_type.checklist?.map((x) => (
                                             <span

@@ -15,7 +15,7 @@ class DashboardController extends Controller
     public function __invoke(Request $request)
     {
         $user = $request->user();
-        $baseLoans = Loan::query()->with(['user:id,name,institution', 'items.toolType:id,name,code'])->latest();
+        $baseLoans = Loan::query()->with(['borrower:id,name,institution', 'items.toolType:id,name,code'])->latest();
         if ($user->role === 'user') {
             $baseLoans->where('user_id', $user->id);
         }

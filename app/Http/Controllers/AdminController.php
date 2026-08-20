@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\Borrower;
 use App\Models\Category;
 use App\Models\Location;
+use App\Models\PhysicalToken;
 use App\Models\SystemSetting;
 use App\Models\ToolType;
 use App\Models\User;
@@ -20,20 +22,42 @@ class AdminController extends Controller
     {
         return Inertia::render('Operations/Admin', [
             'users' => User::orderBy('name')->get(), 'activity' => ActivityLog::with('user:id,name')->latest()->limit(30)->get(),
+            'borrowers' => Borrower::with(['user:id,email', 'tokens' => fn ($query) => $query->orderBy('code')])->orderBy('name')->get(),
             'categories' => Category::orderBy('name')->get(), 'locations' => Location::withCount('units')->with('parent:id,name')->orderBy('name')->get(),
             'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name'])->orderBy('name')->get(), 'settings' => SystemSetting::orderBy('key')->get(),
         ]);
     }
 
+    public function storeBorrower(Request $request)
+    {
+        $borrower = Borrower::create($request->validate([
+            'name' => ['required', 'string', 'max:255'], 'identifier' => ['nullable', 'string', 'max:100'],
+            'institution' => ['nullable', 'string', 'max:255'], 'phone' => ['nullable', 'string', 'max:50'],
+        ]));
+        AuditLogger::record('borrower.created', $borrower);
+
+        return back()->with('success', 'Profil peminjam tanpa akun ditambahkan.');
+    }
+
+    public function storeToken(Request $request, Borrower $borrower)
+    {
+        $request->merge(['code' => mb_strtoupper(trim((string) $request->input('code')))]);
+        $data = $request->validate(['code' => ['required', 'string', 'max:50', Rule::unique('physical_tokens', 'code')]]);
+        $token = PhysicalToken::create(['borrower_id' => $borrower->id, 'code' => mb_strtoupper(trim($data['code'])), 'status' => 'dipegang_peminjam']);
+        AuditLogger::record('physical_token.created', $token, ['borrower_id' => $borrower->id]);
+
+        return back()->with('success', "Token {$token->code} terdaftar untuk {$borrower->name}.");
+    }
+
     public function updateUser(Request $request, User $user)
     {
-        $data = $request->validate(['institution' => ['nullable', 'string'], 'token_quota' => ['required', 'integer', 'min:1', 'max:50', 'gte:'.$user->token_used], 'is_active' => ['required', 'boolean'], 'reason' => ['required', 'string', 'min:5']]);
+        $data = $request->validate(['institution' => ['nullable', 'string'], 'is_active' => ['required', 'boolean'], 'reason' => ['required', 'string', 'min:5']]);
         if ($user->is($request->user()) && ! $data['is_active']) {
             return back()->withErrors(['is_active' => 'Administrator tidak dapat menonaktifkan akunnya sendiri.']);
         }
         $reason = $data['reason'];
         unset($data['reason']);
-        $before = $user->only(['institution', 'token_quota', 'is_active']);
+        $before = $user->only(['institution', 'is_active']);
         $user->update($data);
         AuditLogger::record('user.updated', $user, ['before' => $before, 'after' => $data, 'reason' => $reason]);
 

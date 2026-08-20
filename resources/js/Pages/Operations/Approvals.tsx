@@ -46,10 +46,10 @@ export default function Approvals({
                                                 {loan.trx_no}
                                             </p>
                                             <h3 className="mt-1 font-display text-2xl font-bold">
-                                                {loan.user.name}
+                                                {loan.borrower.name}
                                             </h3>
                                             <p className="text-xs text-muted">
-                                                {loan.user.institution}
+                                                {loan.borrower.institution}
                                             </p>
                                         </div>
                                         <StatusBadge status={loan.status} />
@@ -132,7 +132,7 @@ export default function Approvals({
                                         {e.loan.trx_no}
                                     </p>
                                     <p className="text-sm font-semibold">
-                                        {e.loan.user.name}
+                                        {e.loan.borrower.name}
                                     </p>
                                     <p className="text-xs text-muted">
                                         Diajukan oleh {e.requester.name}

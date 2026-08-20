@@ -22,6 +22,11 @@ class User extends Authenticatable
         return $this->hasMany(Loan::class);
     }
 
+    public function borrower()
+    {
+        return $this->hasOne(Borrower::class);
+    }
+
     public function notifications()
     {
         return $this->hasMany(SystemNotification::class);

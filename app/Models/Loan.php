@@ -18,6 +18,16 @@ class Loan extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function borrower()
+    {
+        return $this->belongsTo(Borrower::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by_id');

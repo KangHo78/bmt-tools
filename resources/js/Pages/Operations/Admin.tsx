@@ -1,12 +1,15 @@
 import { Head, router } from "@inertiajs/react";
 import {
     Boxes,
+    KeyRound,
     MapPinned,
     Pencil,
+    Plus,
     Settings,
     Tags,
     Trash2,
     Users,
+    UserPlus,
 } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
@@ -16,6 +19,7 @@ import { formatDateTime, roleLabels } from "@/lib/ui";
 
 export default function Admin(props: {
     users: any[];
+    borrowers: any[];
     activity: any[];
     categories: any[];
     locations: any[];
@@ -25,6 +29,7 @@ export default function Admin(props: {
     const [tab, setTab] = useState("users");
     const tabs = [
         ["users", "Pengguna", Users],
+        ["borrowers", "Peminjam & Token", KeyRound],
         ["master", "Master Aset", Boxes],
         ["categories", "Kategori", Tags],
         ["locations", "Lokasi", MapPinned],
@@ -37,7 +42,7 @@ export default function Admin(props: {
             <PageHeader
                 eyebrow="System control"
                 title="Administrasi"
-                description="Kelola akses, kuota token, master data, parameter, dan audit trail."
+                description="Kelola akses, peminjam, token fisik, master data, parameter, dan audit trail."
             />
             <div className="mb-5 flex flex-wrap gap-2">
                 {tabs.map(([key, label, Icon]: any) => (
@@ -52,6 +57,7 @@ export default function Admin(props: {
                 ))}
             </div>
             {tab === "users" && <UsersTab users={props.users} />}{" "}
+            {tab === "borrowers" && <BorrowersTab borrowers={props.borrowers} />}{" "}
             {tab === "master" && <MasterTab {...props} />}{" "}
             {tab === "categories" && (
                 <CategoriesTab categories={props.categories} />
@@ -64,13 +70,26 @@ export default function Admin(props: {
         </TamsLayout>
     );
 }
+function BorrowersTab({ borrowers }: { borrowers: any[] }) {
+    const [selected, setSelected] = useState<any>(borrowers[0] ?? null);
+    const [code, setCode] = useState("");
+    const [guest, setGuest] = useState({ name: "", identifier: "", institution: "", phone: "" });
+    return <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+        <Panel className="overflow-hidden"><div className="border-b p-5"><h2 className="font-display text-2xl font-bold">Peminjam & Kepingan Token</h2><p className="mt-1 text-sm text-muted">Profil dapat terhubung ke akun SSO atau berdiri sendiri untuk peminjam yang datang langsung.</p></div>
+            <div className="divide-y">{borrowers.map(b=><button key={b.id} onClick={()=>setSelected(b)} className={`grid w-full gap-3 p-4 text-left sm:grid-cols-[1fr_auto] ${selected?.id===b.id?"bg-amber/10":"hover:bg-canvas"}`}><div><strong>{b.name}</strong><small>{b.institution||b.identifier||"Identitas belum dicatat"} · {b.user?"Terhubung SSO":"Tanpa akun"}</small></div><div className="flex flex-wrap justify-end gap-1">{b.tokens.length?b.tokens.map((t:any)=><span key={t.id} className={`rounded px-2 py-1 font-num text-[10px] font-bold ${t.status==="dipegang_peminjam"?"bg-green/10 text-green":"bg-amber/15 text-ink"}`}>{t.code} · {t.status.replaceAll("_"," ")}</span>):<span className="text-xs text-muted">Belum ada token</span>}</div></button>)}</div>
+        </Panel>
+        <div className="space-y-5"><Panel className="p-5"><div className="flex items-center gap-2"><KeyRound size={19}/><h3 className="font-display text-xl font-bold">Daftarkan Kepingan</h3></div><p className="mt-2 text-sm text-muted">Token untuk <strong>{selected?.name||"pilih peminjam"}</strong>.</p><div className="mt-4"><Input label="Kode unik token" value={code} set={setCode}/></div><button disabled={!selected||!code} onClick={()=>router.post(`/administrasi/peminjam/${selected.id}/token`,{code},{onSuccess:()=>setCode("")})} className="btn-primary mt-4 w-full"><Plus size={16}/>Tambah Token</button></Panel>
+            <Panel className="p-5"><div className="flex items-center gap-2"><UserPlus size={19}/><h3 className="font-display text-xl font-bold">Peminjam Tanpa Akun</h3></div><div className="mt-4 space-y-3"><Input label="Nama lengkap" value={guest.name} set={v=>setGuest({...guest,name:v})}/><Input label="NIK / NRP / identitas" value={guest.identifier} set={v=>setGuest({...guest,identifier:v})}/><Input label="Unit / perusahaan" value={guest.institution} set={v=>setGuest({...guest,institution:v})}/><Input label="Nomor telepon" value={guest.phone} set={v=>setGuest({...guest,phone:v})}/></div><button disabled={!guest.name} onClick={()=>router.post('/administrasi/peminjam',guest,{onSuccess:()=>setGuest({name:"",identifier:"",institution:"",phone:""})})} className="btn-primary mt-4 w-full"><UserPlus size={16}/>Tambah Peminjam</button></Panel>
+        </div>
+    </div>;
+}
 function UsersTab({ users }: { users: any[] }) {
     const [edit, setEdit] = useState<any>(null);
     return (
         <Panel className="overflow-hidden">
             <div className="border-b p-5">
                 <h2 className="font-display text-2xl font-bold">
-                    Pengguna & Token
+                    Akun & Hak Akses
                 </h2>
                 <p className="mt-1 text-sm text-muted">
                     Pengguna dan hak akses disinkronkan dari grup Tools Management pada aplikasi utama.
@@ -83,7 +102,6 @@ function UsersTab({ users }: { users: any[] }) {
                             <th className="p-3">Pengguna</th>
                             <th className="p-3">Role</th>
                             <th className="p-3">Lembaga</th>
-                            <th className="p-3">Token</th>
                             <th className="p-3">Status</th>
                             <th className="p-3"></th>
                         </tr>
@@ -97,9 +115,6 @@ function UsersTab({ users }: { users: any[] }) {
                                 </td>
                                 <td className="p-3">{roleLabels[u.role]}</td>
                                 <td className="p-3">{u.institution}</td>
-                                <td className="p-3 font-num font-bold">
-                                    {u.token_used}/{u.token_quota}
-                                </td>
                                 <td className="p-3">
                                     <StatusBadge
                                         status={
@@ -127,7 +142,6 @@ function UsersTab({ users }: { users: any[] }) {
 function EditUser({ user, close }: { user: any; close: () => void }) {
     const [d, setD] = useState({
         institution: user.institution ?? "",
-        token_quota: user.token_quota,
         is_active: Boolean(user.is_active),
         reason: "",
     });
@@ -141,12 +155,6 @@ function EditUser({ user, close }: { user: any; close: () => void }) {
                     label="Lembaga"
                     value={d.institution}
                     set={(v) => setD({ ...d, institution: v })}
-                />
-                <Input
-                    label="Kuota token"
-                    value={d.token_quota}
-                    set={(v) => setD({ ...d, token_quota: Number(v) })}
-                    type="number"
                 />
                 <label className="flex gap-2 text-sm">
                     <input

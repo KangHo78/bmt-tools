@@ -44,10 +44,10 @@ export default function Returns({ loans }: { loans: Loan[] }) {
                                         </td>
                                         <td className="p-4">
                                             <p className="font-semibold">
-                                                {l.user.name}
+                                                {l.borrower.name}
                                             </p>
                                             <p className="text-xs text-muted">
-                                                {l.user.institution}
+                                                {l.borrower.institution}
                                             </p>
                                         </td>
                                         <td className="p-4 text-xs">

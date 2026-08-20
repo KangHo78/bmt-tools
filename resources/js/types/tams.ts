@@ -49,7 +49,9 @@ export interface LoanItem {
     condition_out?: string;
     condition_in?: string;
     return_note?: string;
+    physical_token?: { id: number; code: string; status: string };
 }
+export interface Borrower { id:number; name:string; institution?:string; phone?:string; identifier?:string; user?: Pick<User,"id"|"email"> }
 export interface Loan {
     id: number;
     trx_no: string;
@@ -65,7 +67,7 @@ export interface Loan {
     tokens_used: number;
     handover_at?: string;
     returned_at?: string;
-    user: User;
+    borrower: Borrower;
     approver?: User;
     items: LoanItem[];
     extensions?: any[];

@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\ActivityLog;
 use App\Models\AssetCase;
+use App\Models\Borrower;
 use App\Models\Loan;
+use App\Models\PhysicalToken;
 use App\Models\SystemNotification;
 use App\Models\ToolUnit;
 use App\Models\User;
@@ -15,14 +17,18 @@ use Illuminate\Validation\ValidationException;
 
 class LoanService
 {
-    public function create(User $user, array $data, ?UploadedFile $letter, ?User $createdBy = null): Loan
+    public function create(Borrower $borrower, array $data, ?UploadedFile $letter, User $createdBy, bool $allowTokenRegistration = false): Loan
     {
-        return DB::transaction(function () use ($user, $data, $letter, $createdBy) {
-            $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
+        return DB::transaction(function () use ($borrower, $data, $letter, $createdBy, $allowTokenRegistration) {
+            $borrower = Borrower::query()->lockForUpdate()->findOrFail($borrower->id);
             $typeIds = array_values(array_unique($data['tool_type_ids']));
             $needed = count($typeIds);
-            if ($lockedUser->token_used + $needed > $lockedUser->token_quota) {
-                throw ValidationException::withMessages(['tool_type_ids' => 'Token tidak cukup. Tersedia '.($lockedUser->token_quota - $lockedUser->token_used).' token.']);
+            $tokenCodes = collect($data['token_codes'] ?? [])->map(fn ($code) => mb_strtoupper(trim((string) $code)));
+            if ($tokenCodes->count() !== $needed || $tokenCodes->filter()->count() !== $needed) {
+                throw ValidationException::withMessages(['token_codes' => 'Setiap alat wajib ditukar dengan satu kode token fisik.']);
+            }
+            if ($tokenCodes->unique()->count() !== $needed) {
+                throw ValidationException::withMessages(['token_codes' => 'Satu token fisik tidak dapat digunakan untuk dua alat.']);
             }
             foreach ($typeIds as $typeId) {
                 if (! ToolUnit::query()->where('tool_type_id', $typeId)->where('status', 'tersedia')->exists()) {
@@ -34,7 +40,9 @@ class LoanService
             $due = $outside ? Carbon::parse($data['due_date'])->endOfDay() : $this->nearestFriday(Carbon::parse($data['start_date']));
             $loan = Loan::create([
                 'trx_no' => $this->nextNumber(),
-                'user_id' => $lockedUser->id,
+                'user_id' => $borrower->user_id,
+                'borrower_id' => $borrower->id,
+                'created_by' => $createdBy->id,
                 'usage_type' => $data['usage_type'],
                 'purpose' => $data['purpose'],
                 'location_text' => $data['location_text'],
@@ -45,18 +53,32 @@ class LoanService
                 'tokens_used' => $needed,
             ]);
             foreach ($typeIds as $typeId) {
-                $loan->items()->create(['tool_type_id' => $typeId]);
+                $code = $tokenCodes->get((string) $typeId) ?? $tokenCodes->get($typeId);
+                $token = PhysicalToken::query()->lockForUpdate()->where('code', $code)->first();
+                if (! $token && $allowTokenRegistration) {
+                    $token = PhysicalToken::create(['borrower_id' => $borrower->id, 'code' => $code, 'status' => 'dipegang_peminjam']);
+                }
+                if (! $token) {
+                    throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} belum terdaftar. Hubungi petugas."]);
+                }
+                if ($token->borrower_id !== $borrower->id) {
+                    throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} terdaftar atas nama peminjam lain."]);
+                }
+                if ($token->status !== 'dipegang_peminjam') {
+                    throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} sedang digunakan atau tidak aktif."]);
+                }
+                $loan->items()->create(['tool_type_id' => $typeId, 'physical_token_id' => $token->id]);
+                $token->update(['status' => 'direservasi']);
             }
-            $lockedUser->increment('token_used', $needed);
-            $actor = $createdBy ?: $user;
-            $this->log($actor, 'loan.created', $loan, [
+            $borrower->user?->increment('token_used', $needed);
+            $this->log($createdBy, 'loan.created', $loan, [
                 'tokens' => $needed,
-                'borrower_id' => $lockedUser->id,
-                'created_on_behalf' => ! $actor->is($lockedUser),
+                'borrower_id' => $borrower->id,
+                'created_on_behalf' => ! $borrower->user?->is($createdBy),
             ]);
 
-            if (! $actor->is($lockedUser)) {
-                $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$actor->name} membuat {$loan->trx_no} untuk Anda.");
+            if ($borrower->user && ! $borrower->user->is($createdBy)) {
+                $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$createdBy->name} membuat {$loan->trx_no} untuk Anda.");
             }
 
             return $loan;
@@ -86,7 +108,7 @@ class LoanService
     {
         DB::transaction(function () use ($loan, $staff, $unitCodes, $photo) {
             abort_unless(in_array($loan->status, ['disetujui', 'menunggu_serah_terima'], true), 422, 'Peminjaman belum dapat diserahkan.');
-            $loan->load('items.toolType');
+            $loan->load(['items.toolType', 'items.physicalToken']);
             if (count($unitCodes) !== $loan->items->count()) {
                 throw ValidationException::withMessages(['unit_codes' => 'Semua item harus memiliki kode unit.']);
             }
@@ -101,6 +123,7 @@ class LoanService
                 }
                 $item->update(['unit_id' => $unit->id, 'condition_out' => $unit->condition, 'checklist' => array_fill_keys($item->toolType->checklist ?? [], true)]);
                 $unit->update(['status' => 'dipinjam']);
+                $item->physicalToken?->update(['status' => 'ditahan_tool_room']);
             }
             $loan->update(['status' => 'berjalan', 'handover_at' => now(), 'handover_photo_url' => $photo?->store('handover', 'public')]);
             $this->notify($loan, 'Serah terima selesai', "Alat {$loan->trx_no} telah diserahkan. Tenggat {$loan->due_date->translatedFormat('d F Y')}.");
@@ -146,8 +169,13 @@ class LoanService
 
     private function releaseTokens(Loan $loan): void
     {
-        $user = User::query()->lockForUpdate()->findOrFail($loan->user_id);
-        $user->update(['token_used' => max(0, $user->token_used - $loan->tokens_used)]);
+        $loan->loadMissing('items.physicalToken');
+        foreach ($loan->items as $item) {
+            $item->physicalToken?->update(['status' => 'dipegang_peminjam']);
+        }
+        if ($loan->user_id && ($user = User::query()->lockForUpdate()->find($loan->user_id))) {
+            $user->update(['token_used' => max(0, $user->token_used - $loan->tokens_used)]);
+        }
     }
 
     private function nextNumber(): string
@@ -157,6 +185,9 @@ class LoanService
 
     private function notify(Loan $loan, string $title, string $description): void
     {
+        if (! $loan->user_id) {
+            return;
+        }
         SystemNotification::create(['user_id' => $loan->user_id, 'category' => 'informasi', 'title' => $title, 'description' => $description, 'object_type' => 'loan', 'object_id' => $loan->id, 'href' => "/peminjaman/{$loan->id}"]);
     }
 

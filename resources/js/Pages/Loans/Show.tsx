@@ -158,6 +158,7 @@ export default function Show({ loan }: { loan: Loan }) {
                                         {item.unit?.asset_code ??
                                             "Unit ditentukan saat serah terima"}
                                     </p>
+                                    {item.physical_token && <p className="mt-1 inline-flex rounded bg-amber/15 px-2 py-1 font-num text-xs font-bold">Token {item.physical_token.code}</p>}
                                 </div>
                                 <StatusBadge
                                     status={
@@ -218,14 +219,14 @@ export default function Show({ loan }: { loan: Loan }) {
                         <p className="label">Peminjam</p>
                         <div className="mt-3 flex items-center gap-3">
                             <div className="grid size-11 place-items-center rounded bg-ink font-display text-xl font-bold text-white">
-                                {loan.user.name.charAt(0)}
+                                {loan.borrower.name.charAt(0)}
                             </div>
                             <div>
                                 <p className="font-semibold">
-                                    {loan.user.name}
+                                    {loan.borrower.name}
                                 </p>
                                 <p className="text-xs text-muted">
-                                    {loan.user.institution}
+                                    {loan.borrower.institution}
                                 </p>
                             </div>
                         </div>
@@ -233,7 +234,7 @@ export default function Show({ loan }: { loan: Loan }) {
                             <Meta
                                 icon={UserRound}
                                 label="Kontak"
-                                value={loan.user.phone ?? loan.user.email}
+                                value={loan.borrower.phone ?? loan.borrower.user?.email ?? "Tanpa akun"}
                             />
                             <Meta
                                 icon={MapPin}

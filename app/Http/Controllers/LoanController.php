@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Borrower;
 use App\Models\Loan;
 use App\Models\LoanExtension;
 use App\Models\SsoUser;
@@ -13,7 +14,6 @@ use App\Services\SsoUserSynchronizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class LoanController extends Controller
@@ -25,7 +25,7 @@ class LoanController extends Controller
 
     public function index(Request $request)
     {
-        $query = Loan::with(['user:id,name,institution', 'items.toolType:id,name,code'])->latest();
+        $query = Loan::with(['borrower:id,name,institution', 'items.toolType:id,name,code'])->latest();
         if ($request->user()->role === 'user') {
             $query->where('user_id', $request->user()->id);
         }
@@ -45,8 +45,17 @@ class LoanController extends Controller
             $borrowers = config('sso.enabled')
                 ? SsoUser::managementUsers()->map(fn (SsoUser $ssoUser) => $this->ssoSynchronizer->synchronize($ssoUser, $ssoUser->managementRole()))
                 : User::query()->where('is_active', true)->orderBy('name')->get();
-            $borrowers = $borrowers->filter->is_active;
+            $borrowers->filter->is_active->each(fn (User $user) => Borrower::updateOrCreate(
+                ['user_id' => $user->id],
+                ['name' => $user->name, 'institution' => $user->institution, 'phone' => $user->phone, 'is_active' => true],
+            ));
+            $borrowers = Borrower::query()->where('is_active', true)->with(['user:id,email,role', 'tokens' => fn ($query) => $query->orderBy('code')])->orderBy('name')->get();
         }
+
+        $ownBorrower = Borrower::updateOrCreate(
+            ['user_id' => $request->user()->id],
+            ['name' => $request->user()->name, 'institution' => $request->user()->institution, 'phone' => $request->user()->phone, 'is_active' => true],
+        )->load(['user:id,email,role', 'tokens' => fn ($query) => $query->orderBy('code')]);
 
         return Inertia::render('Loans/Create', [
             'tools' => ToolType::query()
@@ -54,13 +63,15 @@ class LoanController extends Controller
                 ->withCount(['units as available_count' => fn ($query) => $query->where('status', 'tersedia')])
                 ->orderBy('name')
                 ->get(),
-            'token' => ['used' => $request->user()->token_used, 'total' => $request->user()->token_quota],
             'preselected' => array_filter([(int) $request->query('tool')]),
             'canChooseBorrower' => $canChooseBorrower,
-            'selectedBorrowerId' => $request->user()->id,
-            'borrowers' => $borrowers->sortBy('name')->values()->map->only([
-                'id', 'name', 'email', 'institution', 'role', 'token_used', 'token_quota',
-            ]),
+            'selectedBorrowerId' => $ownBorrower->id,
+            'borrowers' => ($canChooseBorrower ? $borrowers : collect([$ownBorrower]))->map(fn (Borrower $borrower) => [
+                'id' => $borrower->id, 'name' => $borrower->name, 'identifier' => $borrower->identifier,
+                'institution' => $borrower->institution, 'phone' => $borrower->phone,
+                'email' => $borrower->user?->email, 'has_account' => (bool) $borrower->user_id,
+                'tokens' => $borrower->tokens->map->only(['id', 'code', 'status'])->values(),
+            ])->values(),
         ]);
     }
 
@@ -73,31 +84,27 @@ class LoanController extends Controller
             'location_text' => ['required', 'string', 'max:255'], 'start_date' => ['required', 'date', 'after_or_equal:today'],
             'due_date' => ['nullable', 'required_if:usage_type,luar_area', 'date', 'after_or_equal:start_date'],
             'letter' => ['nullable', 'required_if:usage_type,luar_area', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'token_codes' => ['required', 'array', 'min:1'],
+            'token_codes.*' => ['required', 'string', 'max:50', 'distinct'],
             'borrower_id' => $canChooseBorrower
-                ? ['required', 'integer', 'exists:users,id']
+                ? ['nullable', 'required_without:new_borrower.name', 'integer', 'exists:borrowers,id']
                 : ['prohibited'],
+            'new_borrower.name' => $canChooseBorrower ? ['nullable', 'required_without:borrower_id', 'string', 'max:255'] : ['prohibited'],
+            'new_borrower.identifier' => $canChooseBorrower ? ['nullable', 'string', 'max:100'] : ['prohibited'],
+            'new_borrower.institution' => $canChooseBorrower ? ['nullable', 'string', 'max:255'] : ['prohibited'],
+            'new_borrower.phone' => $canChooseBorrower ? ['nullable', 'string', 'max:50'] : ['prohibited'],
         ]);
-        $borrower = $request->user();
+        $borrower = Borrower::query()->where('user_id', $request->user()->id)->firstOrFail();
 
         if ($canChooseBorrower) {
-            $borrower = User::query()->where('is_active', true)->findOrFail($data['borrower_id']);
-
-            if (config('sso.enabled')) {
-                $ssoUser = $borrower->sso_user_id
-                    ? SsoUser::query()->whereKey($borrower->sso_user_id)->where('is_active', 1)->where('is_group', 0)->first()
-                    : null;
-
-                if (! $ssoUser?->managementRole()) {
-                    throw ValidationException::withMessages([
-                        'borrower_id' => 'Peminjam tidak lagi memiliki grup akses Tools Management.',
-                    ]);
-                }
-            }
+            $borrower = filled($data['borrower_id'] ?? null)
+                ? Borrower::query()->where('is_active', true)->findOrFail($data['borrower_id'])
+                : Borrower::create([...$data['new_borrower'], 'is_active' => true]);
         }
 
-        $loan = $this->service->create($borrower, $data, $request->file('letter'), $request->user());
+        $loan = $this->service->create($borrower, $data, $request->file('letter'), $request->user(), $canChooseBorrower);
 
-        return to_route('loans.show', $loan)->with('success', $borrower->is($request->user())
+        return to_route('loans.show', $loan)->with('success', $borrower->user?->is($request->user())
             ? 'Permohonan berhasil dibuat.'
             : "Peminjaman atas nama {$borrower->name} berhasil dibuat.");
     }
@@ -105,9 +112,9 @@ class LoanController extends Controller
     public function show(Request $request, Loan $loan)
     {
         if ($request->user()->role === 'user') {
-            abort_unless($loan->user_id === $request->user()->id, 403);
+            abort_unless(($loan->borrower?->user_id ?? $loan->user_id) === $request->user()->id, 403);
         }
-        $loan->load(['user:id,name,email,institution,phone,token_quota,token_used', 'approver:id,name', 'items.toolType', 'items.unit.location', 'extensions']);
+        $loan->load(['borrower.user:id,email', 'approver:id,name', 'items.toolType', 'items.physicalToken', 'items.unit.location', 'extensions']);
 
         return Inertia::render('Loans/Show', ['loan' => $loan]);
     }
@@ -130,7 +137,7 @@ class LoanController extends Controller
 
     public function handoverForm(Loan $loan)
     {
-        $loan->load(['user:id,name,institution', 'items.toolType', 'items.unit']);
+        $loan->load(['borrower:id,name,institution', 'items.toolType', 'items.physicalToken', 'items.unit']);
 
         return Inertia::render('Loans/Handover', ['loan' => $loan]);
     }
@@ -145,7 +152,7 @@ class LoanController extends Controller
 
     public function returnForm(Loan $loan)
     {
-        $loan->load(['user:id,name,institution', 'items.toolType', 'items.unit']);
+        $loan->load(['borrower:id,name,institution', 'items.toolType', 'items.physicalToken', 'items.unit']);
 
         return Inertia::render('Loans/Return', ['loan' => $loan]);
     }
@@ -164,7 +171,7 @@ class LoanController extends Controller
     public function extend(Request $request, Loan $loan)
     {
         if ($request->user()->role === 'user') {
-            abort_unless($loan->user_id === $request->user()->id, 403);
+            abort_unless(($loan->borrower?->user_id ?? $loan->user_id) === $request->user()->id, 403);
         }
         abort_unless(in_array($loan->status, ['berjalan', 'terlambat', 'menunggu_inspeksi'], true), 422, 'Hanya pinjaman aktif yang dapat diperpanjang.');
         $data = $request->validate(['new_due_date' => ['required', 'date', 'after:'.$loan->due_date->toDateString()], 'reason' => ['required', 'string', 'min:5']]);
@@ -187,7 +194,9 @@ class LoanController extends Controller
         abort_unless($extension->status === 'menunggu_approval', 422);
         $extension->update(['status' => 'disetujui', 'approved_by' => $request->user()->id]);
         $extension->loan()->update(['due_date' => $extension->new_due_date, 'status' => $extension->loan->status === 'terlambat' ? 'berjalan' : $extension->loan->status]);
-        SystemNotification::create(['user_id' => $extension->loan->user_id, 'category' => 'informasi', 'title' => "Perpanjangan {$extension->loan->trx_no} disetujui", 'description' => 'Tenggat baru '.$extension->new_due_date->translatedFormat('d F Y').'.', 'object_type' => 'loan', 'object_id' => $extension->loan_id, 'href' => "/peminjaman/{$extension->loan_id}"]);
+        if ($extension->loan->user_id) {
+            SystemNotification::create(['user_id' => $extension->loan->user_id, 'category' => 'informasi', 'title' => "Perpanjangan {$extension->loan->trx_no} disetujui", 'description' => 'Tenggat baru '.$extension->new_due_date->translatedFormat('d F Y').'.', 'object_type' => 'loan', 'object_id' => $extension->loan_id, 'href' => "/peminjaman/{$extension->loan_id}"]);
+        }
 
         return back()->with('success', 'Perpanjangan disetujui.');
     }
@@ -197,14 +206,18 @@ class LoanController extends Controller
         $request->validate(['reason' => ['required', 'string', 'min:5']]);
         abort_unless($extension->status === 'menunggu_approval', 422);
         $extension->update(['status' => 'ditolak', 'reason' => $extension->reason.' | Alasan penolakan: '.$request->reason, 'approved_by' => $request->user()->id]);
-        SystemNotification::create(['user_id' => $extension->loan->user_id, 'category' => 'informasi', 'title' => "Perpanjangan {$extension->loan->trx_no} ditolak", 'description' => $request->reason, 'object_type' => 'loan', 'object_id' => $extension->loan_id, 'href' => "/peminjaman/{$extension->loan_id}"]);
+        if ($extension->loan->user_id) {
+            SystemNotification::create(['user_id' => $extension->loan->user_id, 'category' => 'informasi', 'title' => "Perpanjangan {$extension->loan->trx_no} ditolak", 'description' => $request->reason, 'object_type' => 'loan', 'object_id' => $extension->loan_id, 'href' => "/peminjaman/{$extension->loan_id}"]);
+        }
 
         return back()->with('success', 'Perpanjangan ditolak.');
     }
 
     public function remind(Request $request, Loan $loan)
     {
-        SystemNotification::create(['user_id' => $loan->user_id, 'category' => 'perlu_tindakan', 'title' => "Pengingat pengembalian {$loan->trx_no}", 'description' => 'Segera kembalikan alat sebelum '.$loan->due_date->translatedFormat('d F Y').'.', 'object_type' => 'loan', 'object_id' => $loan->id, 'href' => "/peminjaman/{$loan->id}"]);
+        if ($loan->user_id) {
+            SystemNotification::create(['user_id' => $loan->user_id, 'category' => 'perlu_tindakan', 'title' => "Pengingat pengembalian {$loan->trx_no}", 'description' => 'Segera kembalikan alat sebelum '.$loan->due_date->translatedFormat('d F Y').'.', 'object_type' => 'loan', 'object_id' => $loan->id, 'href' => "/peminjaman/{$loan->id}"]);
+        }
 
         return back()->with('success', 'Pengingat telah dibuat.');
     }

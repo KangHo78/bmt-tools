@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Borrower;
 use App\Models\SsoUser;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -47,6 +48,11 @@ class SsoUserSynchronizer
         }
 
         $user->forceFill($attributes)->save();
+
+        Borrower::query()->updateOrCreate(
+            ['user_id' => $user->id],
+            ['name' => $user->name, 'institution' => $user->institution, 'phone' => $user->phone, 'is_active' => $user->is_active],
+        );
 
         return $user;
     }

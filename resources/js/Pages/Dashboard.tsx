@@ -248,7 +248,7 @@ function OperationsBoard({
                                 </span>
                             </div>
                             <p className="mt-1 truncate text-sm">
-                                {l.user?.name} · {l.purpose}
+                                {l.borrower?.name} · {l.purpose}
                             </p>
                         </RowLink>
                     ))}

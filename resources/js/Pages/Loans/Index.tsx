@@ -76,7 +76,7 @@ export default function Index({
                                         {loan.purpose}
                                     </p>
                                     <p className="text-xs text-muted">
-                                        {loan.user?.name} ·{" "}
+                                        {loan.borrower?.name} ·{" "}
                                         {loan.items
                                             .map((i) => i.tool_type.name)
                                             .join(", ")}

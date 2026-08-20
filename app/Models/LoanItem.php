@@ -27,4 +27,9 @@ class LoanItem extends Model
     {
         return $this->belongsTo(ToolUnit::class, 'unit_id');
     }
+
+    public function physicalToken()
+    {
+        return $this->belongsTo(PhysicalToken::class);
+    }
 }
