@@ -85,7 +85,20 @@ class InventoryController extends Controller
     {
         $receipt->load('items.toolType', 'items.units');
 
-        return Inertia::render('Inventory/Labels', ['receipt' => $receipt]);
+        $units = $receipt->items->flatMap(fn ($item) => $item->units->map(fn ($unit) => [
+            'id' => $unit->id,
+            'asset_code' => $unit->asset_code,
+            'owner' => $unit->owner ?: $receipt->owner_institution,
+            'tool_type' => $item->toolType->only(['id', 'name', 'code']),
+        ]))->values();
+
+        return Inertia::render('Inventory/Labels', [
+            'batch' => [
+                'title' => $receipt->reference_no,
+                'back_url' => route('inventory.receipts.show', $receipt, absolute: false),
+                'units' => $units,
+            ],
+        ]);
     }
 
     public function move(Request $request, ToolUnit $unit)

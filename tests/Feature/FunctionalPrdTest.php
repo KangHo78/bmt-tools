@@ -17,6 +17,7 @@ use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class FunctionalPrdTest extends TestCase
@@ -48,6 +49,32 @@ class FunctionalPrdTest extends TestCase
         $this->assertSame(2, $receipt->items->first()->units->pluck('asset_code')->unique()->count());
         $this->actingAs($staff)->get(route('inventory.labels', $receipt))->assertOk();
         $this->assertDatabaseHas('activity_logs', ['action' => 'asset.received', 'subject_id' => $receipt->id]);
+    }
+
+    public function test_catalog_labels_can_be_printed_by_tools_admin_but_not_borrower(): void
+    {
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $borrower = User::where('email', 'user@tams.id')->firstOrFail();
+        $type = ToolType::whereHas('units')->firstOrFail();
+        $unit = $type->units()->firstOrFail();
+
+        $this->actingAs($staff)
+            ->get(route('catalog.labels', $type))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inventory/Labels')
+                ->has('batch.units', $type->units()->count()));
+
+        $this->actingAs($staff)
+            ->get(route('catalog.labels', ['toolType' => $type, 'unit' => $unit->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('batch.title', $unit->asset_code)
+                ->has('batch.units', 1));
+
+        $this->actingAs($borrower)
+            ->get(route('catalog.labels', $type))
+            ->assertForbidden();
     }
 
     public function test_location_move_records_origin_destination_and_reason(): void

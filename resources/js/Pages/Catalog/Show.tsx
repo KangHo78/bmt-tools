@@ -1,16 +1,19 @@
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, usePage } from "@inertiajs/react";
 import {
     ArrowLeft,
     MapPin,
     PackageCheck,
     Plus,
+    Printer,
     ShieldCheck,
 } from "lucide-react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import { AssetGlyph, Panel, StatusBadge } from "@/Components/TamsUI";
-import type { ToolType } from "@/types/tams";
+import type { PageProps, ToolType } from "@/types/tams";
 
 export default function Show({ tool }: { tool: ToolType }) {
+    const role = usePage<PageProps>().props.auth.user.role;
+    const canPrint = role === "petugas" || role === "admin";
     const available =
         tool.units?.filter((x) => x.status === "tersedia").length ?? 0;
     return (
@@ -40,13 +43,24 @@ export default function Show({ tool }: { tool: ToolType }) {
                                 {tool.category?.name} · {tool.size}
                             </p>
                         </div>
-                        <Link
-                            href={`/peminjaman/baru?tool=${tool.id}`}
-                            className={`btn-primary ${available === 0 ? "pointer-events-none opacity-50" : ""}`}
-                        >
-                            <Plus size={17} />
-                            Pinjam Alat
-                        </Link>
+                        <div className="flex flex-wrap gap-2">
+                            {canPrint && (
+                                <Link
+                                    href={`/katalog/${tool.id}/label`}
+                                    className={`btn-secondary ${!tool.units?.length ? "pointer-events-none opacity-50" : ""}`}
+                                >
+                                    <Printer size={17} />
+                                    Cetak Semua Label
+                                </Link>
+                            )}
+                            <Link
+                                href={`/peminjaman/baru?tool=${tool.id}`}
+                                className={`btn-primary ${available === 0 ? "pointer-events-none opacity-50" : ""}`}
+                            >
+                                <Plus size={17} />
+                                Pinjam Alat
+                            </Link>
+                        </div>
                     </div>
                     <p className="mt-6 max-w-2xl leading-relaxed text-muted">
                         {tool.description}
@@ -97,7 +111,19 @@ export default function Show({ tool }: { tool: ToolType }) {
                                         {unit.location?.name}
                                     </p>
                                 </div>
-                                <StatusBadge status={unit.status} />
+                                <div className="flex items-center gap-2">
+                                    <StatusBadge status={unit.status} />
+                                    {canPrint && (
+                                        <Link
+                                            href={`/katalog/${tool.id}/label?unit=${unit.id}`}
+                                            className="btn-secondary !min-h-9 !px-3"
+                                            aria-label={`Cetak label ${unit.asset_code}`}
+                                        >
+                                            <Printer size={15} />
+                                            Label
+                                        </Link>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>

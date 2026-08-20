@@ -26,4 +26,30 @@ class CatalogController extends Controller
 
         return Inertia::render('Catalog/Show', ['tool' => $toolType]);
     }
+
+    public function labels(Request $request, ToolType $toolType)
+    {
+        $unitId = $request->integer('unit');
+        $units = $toolType->units()
+            ->when($unitId, fn ($query) => $query->whereKey($unitId))
+            ->orderBy('asset_code')
+            ->get();
+
+        abort_if($unitId && $units->isEmpty(), 404);
+
+        return Inertia::render('Inventory/Labels', [
+            'batch' => [
+                'title' => $unitId
+                    ? $units->first()->asset_code
+                    : "{$toolType->code} — {$toolType->name}",
+                'back_url' => route('catalog.show', $toolType, absolute: false),
+                'units' => $units->map(fn ($unit) => [
+                    'id' => $unit->id,
+                    'asset_code' => $unit->asset_code,
+                    'owner' => $unit->owner,
+                    'tool_type' => $toolType->only(['id', 'name', 'code']),
+                ]),
+            ],
+        ]);
+    }
 }
