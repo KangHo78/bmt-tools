@@ -1,0 +1,580 @@
+import { Head, router } from "@inertiajs/react";
+import { Boxes, MapPinned, Plus, Settings, Users } from "lucide-react";
+import { useState } from "react";
+import TamsLayout from "@/Layouts/TamsLayout";
+import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
+import { formatDateTime, roleLabels } from "@/lib/ui";
+
+export default function Admin(props: {
+    users: any[];
+    activity: any[];
+    categories: any[];
+    locations: any[];
+    toolTypes: any[];
+    settings: any[];
+}) {
+    const [tab, setTab] = useState("users");
+    const tabs = [
+        ["users", "Pengguna", Users],
+        ["master", "Master Aset", Boxes],
+        ["locations", "Lokasi", MapPinned],
+        ["settings", "Pengaturan", Settings],
+        ["activity", "Audit Trail", Settings],
+    ];
+    return (
+        <TamsLayout>
+            <Head title="Administrasi" />
+            <PageHeader
+                eyebrow="System control"
+                title="Administrasi"
+                description="Kelola akses, kuota token, master data, parameter, dan audit trail."
+            />
+            <div className="mb-5 flex flex-wrap gap-2">
+                {tabs.map(([key, label, Icon]: any) => (
+                    <button
+                        key={key}
+                        onClick={() => setTab(key)}
+                        className={`btn-secondary ${tab === key ? "!border-ink !bg-ink !text-white" : ""}`}
+                    >
+                        <Icon size={16} />
+                        {label}
+                    </button>
+                ))}
+            </div>
+            {tab === "users" && <UsersTab users={props.users} />}{" "}
+            {tab === "master" && <MasterTab {...props} />}{" "}
+            {tab === "locations" && (
+                <LocationsTab locations={props.locations} />
+            )}{" "}
+            {tab === "settings" && <SettingsTab settings={props.settings} />}{" "}
+            {tab === "activity" && <Activity rows={props.activity} />}
+        </TamsLayout>
+    );
+}
+function UsersTab({ users }: { users: any[] }) {
+    const [show, setShow] = useState(false);
+    const [edit, setEdit] = useState<any>(null);
+    return (
+        <Panel className="overflow-hidden">
+            <div className="flex items-center justify-between border-b p-5">
+                <h2 className="font-display text-2xl font-bold">
+                    Pengguna & Token
+                </h2>
+                <button onClick={() => setShow(true)} className="btn-primary">
+                    <Plus size={16} />
+                    Pengguna
+                </button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                    <thead className="bg-ink text-[10px] uppercase tracking-wider text-white">
+                        <tr>
+                            <th className="p-3">Pengguna</th>
+                            <th className="p-3">Role</th>
+                            <th className="p-3">Lembaga</th>
+                            <th className="p-3">Token</th>
+                            <th className="p-3">Status</th>
+                            <th className="p-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {users.map((u) => (
+                            <tr key={u.id} className="border-b last:border-0">
+                                <td className="p-3">
+                                    <strong>{u.name}</strong>
+                                    <small>{u.email}</small>
+                                </td>
+                                <td className="p-3">{roleLabels[u.role]}</td>
+                                <td className="p-3">{u.institution}</td>
+                                <td className="p-3 font-num font-bold">
+                                    {u.token_used}/{u.token_quota}
+                                </td>
+                                <td className="p-3">
+                                    <StatusBadge
+                                        status={
+                                            u.is_active ? "tersedia" : "ditolak"
+                                        }
+                                    />
+                                </td>
+                                <td className="p-3">
+                                    <button
+                                        onClick={() => setEdit(u)}
+                                        className="btn-secondary !min-h-9"
+                                    >
+                                        Ubah
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {show && <NewUser close={() => setShow(false)} />}{" "}
+            {edit && <EditUser user={edit} close={() => setEdit(null)} />}
+        </Panel>
+    );
+}
+function NewUser({ close }: { close: () => void }) {
+    const [d, setD] = useState({
+        name: "",
+        email: "",
+        role: "user",
+        institution: "",
+        phone: "",
+        token_quota: 10,
+        password: "",
+    });
+    return (
+        <Modal title="Pengguna Baru" close={close}>
+            <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                    label="Nama"
+                    value={d.name}
+                    set={(v) => setD({ ...d, name: v })}
+                />
+                <Input
+                    label="Email"
+                    value={d.email}
+                    set={(v) => setD({ ...d, email: v })}
+                    type="email"
+                />
+                <Select
+                    label="Role"
+                    value={d.role}
+                    set={(v) => setD({ ...d, role: v })}
+                    options={["user", "petugas", "kepala_logistik", "admin"]}
+                />
+                <Input
+                    label="Lembaga"
+                    value={d.institution}
+                    set={(v) => setD({ ...d, institution: v })}
+                />
+                <Input
+                    label="Kuota token"
+                    value={d.token_quota}
+                    set={(v) => setD({ ...d, token_quota: Number(v) })}
+                    type="number"
+                />
+                <Input
+                    label="Password awal"
+                    value={d.password}
+                    set={(v) => setD({ ...d, password: v })}
+                    type="password"
+                />
+            </div>
+            <button
+                onClick={() =>
+                    router.post("/administrasi/pengguna", d, {
+                        onSuccess: close,
+                    })
+                }
+                className="btn-primary mt-5 w-full"
+            >
+                Buat Pengguna
+            </button>
+        </Modal>
+    );
+}
+function EditUser({ user, close }: { user: any; close: () => void }) {
+    const [d, setD] = useState({
+        role: user.role,
+        institution: user.institution ?? "",
+        token_quota: user.token_quota,
+        is_active: Boolean(user.is_active),
+        reason: "",
+    });
+    return (
+        <Modal title={`Akses ${user.name}`} close={close}>
+            <div className="space-y-3">
+                <Select
+                    label="Role"
+                    value={d.role}
+                    set={(v) => setD({ ...d, role: v })}
+                    options={["user", "petugas", "kepala_logistik", "admin"]}
+                />
+                <Input
+                    label="Lembaga"
+                    value={d.institution}
+                    set={(v) => setD({ ...d, institution: v })}
+                />
+                <Input
+                    label="Kuota token"
+                    value={d.token_quota}
+                    set={(v) => setD({ ...d, token_quota: Number(v) })}
+                    type="number"
+                />
+                <label className="flex gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={d.is_active}
+                        onChange={(e) =>
+                            setD({ ...d, is_active: e.target.checked })
+                        }
+                    />
+                    Akun aktif
+                </label>
+                <Input
+                    label="Alasan perubahan"
+                    value={d.reason}
+                    set={(v) => setD({ ...d, reason: v })}
+                />
+            </div>
+            <button
+                onClick={() =>
+                    router.post(`/administrasi/pengguna/${user.id}`, d, {
+                        onSuccess: close,
+                    })
+                }
+                className="btn-primary mt-5 w-full"
+            >
+                Simpan Akses
+            </button>
+        </Modal>
+    );
+}
+function MasterTab({ toolTypes, categories, locations }: any) {
+    const [d, setD] = useState({
+        code: "",
+        name: "",
+        category_id: "",
+        primary_location_id: "",
+        size: "",
+        description: "",
+        rules_summary: "",
+        checklist_text: "",
+    });
+    const [cat, setCat] = useState({ name: "", function: "" });
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
+            <Panel className="overflow-hidden">
+                <div className="border-b p-5">
+                    <h2 className="font-display text-2xl font-bold">
+                        Jenis Alat
+                    </h2>
+                </div>
+                {toolTypes.map((t: any) => (
+                    <div
+                        key={t.id}
+                        className="grid gap-2 border-b p-4 last:border-0 sm:grid-cols-[120px_1fr_180px]"
+                    >
+                        <span className="font-num text-xs font-bold">
+                            {t.code}
+                        </span>
+                        <div>
+                            <strong>{t.name}</strong>
+                            <small>{t.category?.name}</small>
+                        </div>
+                        <span className="text-xs text-muted">
+                            {t.primary_location?.name}
+                        </span>
+                    </div>
+                ))}
+            </Panel>
+            <div className="space-y-5">
+                <Panel className="p-5">
+                    <h2 className="font-display text-2xl font-bold">
+                        Jenis Baru
+                    </h2>
+                    <div className="mt-4 space-y-3">
+                        <Input
+                            label="Kode"
+                            value={d.code}
+                            set={(v) => setD({ ...d, code: v.toUpperCase() })}
+                        />
+                        <Input
+                            label="Nama"
+                            value={d.name}
+                            set={(v) => setD({ ...d, name: v })}
+                        />
+                        <SelectMap
+                            label="Kategori"
+                            value={d.category_id}
+                            set={(v) => setD({ ...d, category_id: v })}
+                            rows={categories}
+                        />
+                        <SelectMap
+                            label="Lokasi utama"
+                            value={d.primary_location_id}
+                            set={(v) => setD({ ...d, primary_location_id: v })}
+                            rows={locations}
+                        />
+                        <Input
+                            label="Ukuran/spesifikasi"
+                            value={d.size}
+                            set={(v) => setD({ ...d, size: v })}
+                        />
+                        <label>
+                            <span className="label">
+                                Checklist, satu per baris
+                            </span>
+                            <textarea
+                                className="control min-h-24"
+                                value={d.checklist_text}
+                                onChange={(e) =>
+                                    setD({
+                                        ...d,
+                                        checklist_text: e.target.value,
+                                    })
+                                }
+                            />
+                        </label>
+                        <button
+                            onClick={() =>
+                                router.post("/administrasi/jenis-alat", d)
+                            }
+                            className="btn-primary w-full"
+                        >
+                            Tambah Jenis
+                        </button>
+                    </div>
+                </Panel>
+                <Panel className="p-5">
+                    <h2 className="font-display text-xl font-bold">
+                        Kategori Baru
+                    </h2>
+                    <div className="mt-3 space-y-3">
+                        <Input
+                            label="Nama"
+                            value={cat.name}
+                            set={(v) => setCat({ ...cat, name: v })}
+                        />
+                        <Input
+                            label="Fungsi"
+                            value={cat.function}
+                            set={(v) => setCat({ ...cat, function: v })}
+                        />
+                        <button
+                            onClick={() =>
+                                router.post("/administrasi/kategori", cat)
+                            }
+                            className="btn-secondary w-full"
+                        >
+                            Tambah Kategori
+                        </button>
+                    </div>
+                </Panel>
+            </div>
+        </div>
+    );
+}
+function LocationsTab({ locations }: { locations: any[] }) {
+    const [d, setD] = useState({
+        name: "",
+        type: "slot",
+        parent_id: "",
+        capacity: "",
+    });
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <Panel className="overflow-hidden">
+                {locations.map((x) => (
+                    <div
+                        key={x.id}
+                        className="grid grid-cols-[1fr_100px_1fr_80px] gap-3 border-b p-4 text-sm last:border-0"
+                    >
+                        <strong>{x.name}</strong>
+                        <span className="capitalize">{x.type}</span>
+                        <span className="text-muted">
+                            {x.parent?.name ?? "Root"}
+                        </span>
+                        <span className="font-num">{x.capacity ?? "—"}</span>
+                    </div>
+                ))}
+            </Panel>
+            <Panel className="h-fit p-5">
+                <h2 className="font-display text-2xl font-bold">Lokasi Baru</h2>
+                <div className="mt-4 space-y-3">
+                    <Input
+                        label="Nama"
+                        value={d.name}
+                        set={(v) => setD({ ...d, name: v })}
+                    />
+                    <Select
+                        label="Tipe"
+                        value={d.type}
+                        set={(v) => setD({ ...d, type: v })}
+                        options={["area", "ruang", "rak", "slot"]}
+                    />
+                    <SelectMap
+                        label="Induk"
+                        value={d.parent_id}
+                        set={(v) => setD({ ...d, parent_id: v })}
+                        rows={locations}
+                        optional
+                    />
+                    <Input
+                        label="Kapasitas"
+                        value={d.capacity}
+                        set={(v) => setD({ ...d, capacity: v })}
+                        type="number"
+                    />
+                    <button
+                        onClick={() => router.post("/administrasi/lokasi", d)}
+                        className="btn-primary w-full"
+                    >
+                        Tambah Lokasi
+                    </button>
+                </div>
+            </Panel>
+        </div>
+    );
+}
+function SettingsTab({ settings }: { settings: any[] }) {
+    const initial = Object.fromEntries(
+        settings.map((x) => [x.key, x.value ?? ""]),
+    );
+    const [d, setD] = useState<Record<string, string>>(initial);
+    const [reason, setReason] = useState("");
+    return (
+        <Panel className="mx-auto max-w-2xl p-5">
+            <h2 className="font-display text-2xl font-bold">
+                Parameter Operasional
+            </h2>
+            <div className="mt-5 space-y-4">
+                {Object.keys(d).map((key) => (
+                    <Input
+                        key={key}
+                        label={key.replaceAll("_", " ")}
+                        value={d[key]}
+                        set={(v) => setD({ ...d, [key]: v })}
+                    />
+                ))}
+                <Input
+                    label="Alasan perubahan"
+                    value={reason}
+                    set={setReason}
+                />
+                <button
+                    onClick={() =>
+                        router.post("/administrasi/pengaturan", {
+                            settings: d,
+                            reason,
+                        })
+                    }
+                    className="btn-primary w-full"
+                >
+                    Simpan Pengaturan
+                </button>
+            </div>
+        </Panel>
+    );
+}
+function Activity({ rows }: { rows: any[] }) {
+    return (
+        <Panel className="overflow-hidden">
+            {rows.map((x) => (
+                <div key={x.id} className="border-b p-4 last:border-0">
+                    <p className="text-sm font-semibold">{x.action}</p>
+                    <p className="mt-1 text-xs text-muted">
+                        {x.user?.name ?? "Sistem"} ·{" "}
+                        {formatDateTime(x.created_at)}
+                    </p>
+                </div>
+            ))}
+        </Panel>
+    );
+}
+function Modal({
+    title,
+    close,
+    children,
+}: {
+    title: string;
+    close: () => void;
+    children: any;
+}) {
+    return (
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-ink/60 p-4">
+            <Panel className="w-full max-w-2xl p-5">
+                <div className="mb-5 flex justify-between">
+                    <h2 className="font-display text-3xl font-bold">{title}</h2>
+                    <button onClick={close}>×</button>
+                </div>
+                {children}
+            </Panel>
+        </div>
+    );
+}
+function Input({
+    label,
+    value,
+    set,
+    type = "text",
+}: {
+    label: string;
+    value: any;
+    set: (v: string) => void;
+    type?: string;
+}) {
+    return (
+        <label>
+            <span className="label">{label}</span>
+            <input
+                type={type}
+                className="control"
+                value={value}
+                onChange={(e) => set(e.target.value)}
+            />
+        </label>
+    );
+}
+function Select({
+    label,
+    value,
+    set,
+    options,
+}: {
+    label: string;
+    value: string;
+    set: (v: string) => void;
+    options: string[];
+}) {
+    return (
+        <label>
+            <span className="label">{label}</span>
+            <select
+                className="control"
+                value={value}
+                onChange={(e) => set(e.target.value)}
+            >
+                {options.map((x) => (
+                    <option key={x} value={x}>
+                        {x.replaceAll("_", " ")}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}
+function SelectMap({
+    label,
+    value,
+    set,
+    rows,
+    optional = false,
+}: {
+    label: string;
+    value: string;
+    set: (v: string) => void;
+    rows: any[];
+    optional?: boolean;
+}) {
+    return (
+        <label>
+            <span className="label">{label}</span>
+            <select
+                className="control"
+                value={value}
+                onChange={(e) => set(e.target.value)}
+            >
+                {optional && <option value="">Tanpa induk</option>}
+                <option value="">Pilih...</option>
+                {rows.map((x) => (
+                    <option key={x.id} value={x.id}>
+                        {x.name}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}

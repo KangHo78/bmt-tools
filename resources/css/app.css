@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+    --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+    --font-sans: "IBM Plex Sans", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+    --color-canvas: #f2f0e9;
+    --color-surface: #fffefa;
+    --color-ink: #17201d;
+    --color-muted: #64706a;
+    --color-line: #cbd0c8;
+    --color-amber: #f2a900;
+    --color-amber-ink: #4a3400;
+    --color-red: #c73a2a;
+    --color-green: #28735a;
+    --color-blue: #276c91;
+}
+
+@layer base {
+    * { border-color: var(--color-line); }
+    html { color-scheme: light; }
+    body { margin: 0; background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+    h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: .01em; }
+    button, a, input, select, textarea { transition: border-color 160ms, background-color 160ms, color 160ms, transform 160ms; }
+    ::selection { background: var(--color-amber); color: var(--color-ink); }
+    :focus-visible { outline: 2px solid var(--color-blue); outline-offset: 2px; }
+}
+
+@layer components {
+    .panel { @apply rounded-lg border border-line bg-surface shadow-[0_1px_0_rgba(23,32,29,.04),0_12px_28px_-20px_rgba(23,32,29,.45)]; }
+    .label { @apply mb-1.5 block text-[11px] font-bold uppercase tracking-[.12em] text-muted; }
+    .control { @apply min-h-11 w-full rounded-md border border-line bg-white px-3 py-2.5 text-sm text-ink placeholder:text-muted/60 focus:border-blue focus:outline-none; }
+    .btn-primary { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-ink bg-ink px-4 py-2.5 text-sm font-bold text-white hover:-translate-y-px hover:bg-green disabled:cursor-not-allowed disabled:opacity-50; }
+    .btn-secondary { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:border-ink hover:bg-white; }
+    .btn-danger { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-red bg-red px-4 py-2.5 text-sm font-bold text-white hover:-translate-y-px hover:bg-red/90; }
+    .font-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .page-enter { animation: page-enter .35s cubic-bezier(.2,.8,.2,1) both; }
+}
+
+.bg-grid { background-image: linear-gradient(to right, rgba(23,32,29,.045) 1px,transparent 1px),linear-gradient(to bottom,rgba(23,32,29,.045) 1px,transparent 1px); background-size:24px 24px; }
+.hazard-stripe { background-image: repeating-linear-gradient(135deg,rgba(242,169,0,.18) 0,rgba(242,169,0,.18) 8px,transparent 8px,transparent 16px); }
+@keyframes page-enter { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.001ms!important; transition-duration:.001ms!important; } }
