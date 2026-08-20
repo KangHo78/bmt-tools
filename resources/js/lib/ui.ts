@@ -11,9 +11,9 @@ import {
 
 export const roleLabels: Record<string, string> = {
     user: "Peminjam",
-    petugas: "Petugas Gudang",
+    petugas: "Admin Tools",
     kepala_logistik: "Kepala Logistik",
-    admin: "Administrator",
+    admin: "Administrator Tools",
 };
 export const statusMeta: Record<
     string,

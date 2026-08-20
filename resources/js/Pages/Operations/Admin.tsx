@@ -1,5 +1,5 @@
 import { Head, router } from "@inertiajs/react";
-import { Boxes, MapPinned, Plus, Settings, Users } from "lucide-react";
+import { Boxes, MapPinned, Settings, Users } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
@@ -52,18 +52,16 @@ export default function Admin(props: {
     );
 }
 function UsersTab({ users }: { users: any[] }) {
-    const [show, setShow] = useState(false);
     const [edit, setEdit] = useState<any>(null);
     return (
         <Panel className="overflow-hidden">
-            <div className="flex items-center justify-between border-b p-5">
+            <div className="border-b p-5">
                 <h2 className="font-display text-2xl font-bold">
                     Pengguna & Token
                 </h2>
-                <button onClick={() => setShow(true)} className="btn-primary">
-                    <Plus size={16} />
-                    Pengguna
-                </button>
+                <p className="mt-1 text-sm text-muted">
+                    Pengguna dan hak akses disinkronkan dari grup Tools Management pada aplikasi utama.
+                </p>
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-left text-sm">
@@ -109,75 +107,12 @@ function UsersTab({ users }: { users: any[] }) {
                     </tbody>
                 </table>
             </div>
-            {show && <NewUser close={() => setShow(false)} />}{" "}
             {edit && <EditUser user={edit} close={() => setEdit(null)} />}
         </Panel>
     );
 }
-function NewUser({ close }: { close: () => void }) {
-    const [d, setD] = useState({
-        name: "",
-        email: "",
-        role: "user",
-        institution: "",
-        phone: "",
-        token_quota: 10,
-        password: "",
-    });
-    return (
-        <Modal title="Pengguna Baru" close={close}>
-            <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                    label="Nama"
-                    value={d.name}
-                    set={(v) => setD({ ...d, name: v })}
-                />
-                <Input
-                    label="Email"
-                    value={d.email}
-                    set={(v) => setD({ ...d, email: v })}
-                    type="email"
-                />
-                <Select
-                    label="Role"
-                    value={d.role}
-                    set={(v) => setD({ ...d, role: v })}
-                    options={["user", "petugas", "kepala_logistik", "admin"]}
-                />
-                <Input
-                    label="Lembaga"
-                    value={d.institution}
-                    set={(v) => setD({ ...d, institution: v })}
-                />
-                <Input
-                    label="Kuota token"
-                    value={d.token_quota}
-                    set={(v) => setD({ ...d, token_quota: Number(v) })}
-                    type="number"
-                />
-                <Input
-                    label="Password awal"
-                    value={d.password}
-                    set={(v) => setD({ ...d, password: v })}
-                    type="password"
-                />
-            </div>
-            <button
-                onClick={() =>
-                    router.post("/administrasi/pengguna", d, {
-                        onSuccess: close,
-                    })
-                }
-                className="btn-primary mt-5 w-full"
-            >
-                Buat Pengguna
-            </button>
-        </Modal>
-    );
-}
 function EditUser({ user, close }: { user: any; close: () => void }) {
     const [d, setD] = useState({
-        role: user.role,
         institution: user.institution ?? "",
         token_quota: user.token_quota,
         is_active: Boolean(user.is_active),
@@ -186,12 +121,9 @@ function EditUser({ user, close }: { user: any; close: () => void }) {
     return (
         <Modal title={`Akses ${user.name}`} close={close}>
             <div className="space-y-3">
-                <Select
-                    label="Role"
-                    value={d.role}
-                    set={(v) => setD({ ...d, role: v })}
-                    options={["user", "petugas", "kepala_logistik", "admin"]}
-                />
+                <p className="rounded-md border border-line bg-canvas p-3 text-sm">
+                    Hak akses: <strong>{roleLabels[user.role]}</strong>. Ubah melalui grup pengguna di aplikasi utama.
+                </p>
                 <Input
                     label="Lembaga"
                     value={d.institution}

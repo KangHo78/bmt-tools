@@ -34,7 +34,9 @@ class SsoCookieAuth
             return $next($request);
         }
 
-        $user = $this->synchronizeUser($ssoUser);
+        $managementRole = $ssoUser->managementRole();
+        $request->attributes->set('sso.management_role', $managementRole);
+        $user = $this->synchronizeUser($ssoUser, $managementRole);
 
         if (! Auth::check() || (int) Auth::id() !== (int) $user->getKey()) {
             Auth::login($user);
@@ -44,7 +46,7 @@ class SsoCookieAuth
         return $next($request);
     }
 
-    private function synchronizeUser(SsoUser $ssoUser): User
+    private function synchronizeUser(SsoUser $ssoUser, ?string $managementRole): User
     {
         $ssoEmail = filled($ssoUser->email)
             ? Str::lower(trim((string) $ssoUser->email))
@@ -74,6 +76,7 @@ class SsoCookieAuth
             'name' => $ssoUser->name ?: $ssoUser->username,
             'email' => $ssoEmail ?: $user->email,
             'phone' => $ssoUser->no_hp ?: $user->phone,
+            'role' => $managementRole ?: $user->role,
             'last_sso_login_at' => now(),
         ])->save();
 

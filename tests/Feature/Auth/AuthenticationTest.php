@@ -20,7 +20,6 @@ class AuthenticationTest extends TestCase
         config([
             'sso.enabled' => true,
             'sso.main_app_url' => 'https://main.example.test',
-            'sso.required_group' => null,
             'database.connections.sso' => [
                 'driver' => 'sqlite',
                 'database' => ':memory:',
@@ -46,6 +45,10 @@ class AuthenticationTest extends TestCase
             $table->unsignedBigInteger('group_id');
             $table->boolean('flag')->default(true);
         });
+
+        $this->createSsoUser(217, 'TOOLS_MANAGEMENT_USER', 'Tools Management User', null, true);
+        $this->createSsoUser(218, 'TOOLS_MANAGEMENT_ADMIN', 'Tools Management Admin', null, true);
+        $this->createSsoUser(219, 'TOOLS_MANAGEMENT_ADMINISRTATOR', 'Tools Management Administrator', null, true);
     }
 
     public function test_login_route_redirects_to_main_application(): void
@@ -58,9 +61,10 @@ class AuthenticationTest extends TestCase
     {
         $localUser = User::factory()->create([
             'email' => 'user@example.test',
-            'role' => 'petugas',
+            'role' => 'admin',
         ]);
         $this->createSsoUser(166, 'USER166', 'User SSO', 'user@example.test');
+        $this->assignGroup(166, 'TOOLS_MANAGEMENT_ADMIN');
 
         $response = $this->withUnencryptedCookie('uuid', '166')->get('/');
 
@@ -78,6 +82,7 @@ class AuthenticationTest extends TestCase
     public function test_sso_cookie_creates_a_local_profile_for_a_new_user(): void
     {
         $this->createSsoUser(200, 'NEWUSER', 'Pengguna Baru', 'new@example.test');
+        $this->assignGroup(200, 'TOOLS_MANAGEMENT_USER');
 
         $this->withUnencryptedCookie('uuid', '200')->get('/')->assertRedirect('/dashboard');
 
@@ -93,6 +98,7 @@ class AuthenticationTest extends TestCase
     public function test_sso_user_without_email_gets_a_stable_local_fallback(): void
     {
         $this->createSsoUser(166, 'kevin', 'Kevin Susilo', null);
+        $this->assignGroup(166, 'TOOLS_MANAGEMENT_USER');
 
         $this->withUnencryptedCookie('uuid', '166')->get('/')->assertRedirect('/dashboard');
 
@@ -112,21 +118,26 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_required_sso_group_is_enforced(): void
+    public function test_user_without_a_tools_management_group_is_forbidden(): void
     {
-        config(['sso.required_group' => 'TOOLS_MANAGEMENT']);
         $this->createSsoUser(166, 'USER166', 'User SSO', 'user@example.test');
-        $this->createSsoUser(300, 'TOOLS_MANAGEMENT', 'Tools Group', 'group@example.test', true);
 
         $this->withUnencryptedCookie('uuid', '166')->get('/dashboard')->assertForbidden();
+    }
 
-        DB::connection('sso')->table('user_group')->insert([
-            'user_id' => 166,
-            'group_id' => 300,
-            'flag' => true,
-        ]);
+    public function test_highest_tools_management_group_determines_the_local_role(): void
+    {
+        $this->createSsoUser(166, 'USER166', 'User SSO', 'user@example.test');
+        $this->assignGroup(166, 'TOOLS_MANAGEMENT_USER');
+        $this->assignGroup(166, 'TOOLS_MANAGEMENT_ADMIN');
 
         $this->withUnencryptedCookie('uuid', '166')->get('/dashboard')->assertOk();
+        $this->assertDatabaseHas('users', ['sso_user_id' => 166, 'role' => 'petugas']);
+
+        $this->assignGroup(166, 'TOOLS_MANAGEMENT_ADMINISRTATOR');
+
+        $this->withUnencryptedCookie('uuid', '166')->get('/dashboard')->assertOk();
+        $this->assertDatabaseHas('users', ['sso_user_id' => 166, 'role' => 'admin']);
     }
 
     private function createSsoUser(
@@ -144,6 +155,19 @@ class AuthenticationTest extends TestCase
             'no_hp' => null,
             'is_group' => $isGroup,
             'is_active' => true,
+        ]);
+    }
+
+    private function assignGroup(int $userId, string $groupUsername): void
+    {
+        $groupId = DB::connection('sso')->table('users')
+            ->where('username', $groupUsername)
+            ->value('id');
+
+        DB::connection('sso')->table('user_group')->insert([
+            'user_id' => $userId,
+            'group_id' => $groupId,
+            'flag' => true,
         ]);
     }
 }

@@ -10,7 +10,6 @@ use App\Models\ToolType;
 use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -25,28 +24,19 @@ class AdminController extends Controller
         ]);
     }
 
-    public function storeUser(Request $request)
-    {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100'], 'email' => ['required', 'email', 'unique:users'], 'role' => ['required', Rule::in(['user', 'petugas', 'kepala_logistik', 'admin'])], 'institution' => ['nullable', 'string'], 'phone' => ['nullable', 'string'], 'token_quota' => ['required', 'integer', 'min:1', 'max:50'], 'password' => ['required', 'string', 'min:8']]);
-        $user = User::create([...$data, 'password' => Hash::make($data['password']), 'is_active' => true]);
-        AuditLogger::record('user.created', $user);
-
-        return back()->with('success', 'Pengguna berhasil dibuat.');
-    }
-
     public function updateUser(Request $request, User $user)
     {
-        $data = $request->validate(['role' => ['required', Rule::in(['user', 'petugas', 'kepala_logistik', 'admin'])], 'institution' => ['nullable', 'string'], 'token_quota' => ['required', 'integer', 'min:1', 'max:50', 'gte:'.$user->token_used], 'is_active' => ['required', 'boolean'], 'reason' => ['required', 'string', 'min:5']]);
+        $data = $request->validate(['institution' => ['nullable', 'string'], 'token_quota' => ['required', 'integer', 'min:1', 'max:50', 'gte:'.$user->token_used], 'is_active' => ['required', 'boolean'], 'reason' => ['required', 'string', 'min:5']]);
         if ($user->is($request->user()) && ! $data['is_active']) {
             return back()->withErrors(['is_active' => 'Administrator tidak dapat menonaktifkan akunnya sendiri.']);
         }
         $reason = $data['reason'];
         unset($data['reason']);
-        $before = $user->only(['role', 'institution', 'token_quota', 'is_active']);
+        $before = $user->only(['institution', 'token_quota', 'is_active']);
         $user->update($data);
         AuditLogger::record('user.updated', $user, ['before' => $before, 'after' => $data, 'reason' => $reason]);
 
-        return back()->with('success', 'Akses pengguna berhasil diperbarui.');
+        return back()->with('success', 'Profil aplikasi pengguna berhasil diperbarui.');
     }
 
     public function storeCategory(Request $request)

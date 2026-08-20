@@ -86,7 +86,6 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
 
     Route::middleware('role:admin')->group(function () {
         Route::get('/administrasi', [AdminController::class, 'index'])->name('admin.index');
-        Route::post('/administrasi/pengguna', [AdminController::class, 'storeUser'])->name('admin.users.store');
         Route::post('/administrasi/pengguna/{user}', [AdminController::class, 'updateUser'])->name('admin.users.update');
         Route::post('/administrasi/kategori', [AdminController::class, 'storeCategory'])->name('admin.categories.store');
         Route::post('/administrasi/lokasi', [AdminController::class, 'storeLocation'])->name('admin.locations.store');

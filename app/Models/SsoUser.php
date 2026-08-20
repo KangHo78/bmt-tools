@@ -24,15 +24,24 @@ class SsoUser extends Model
         ];
     }
 
-    public function hasGroup(string $username): bool
+    public function managementRole(): ?string
     {
-        return $this->getConnection()->table('user_group')
+        $groupUsernames = $this->getConnection()->table('user_group')
             ->join('users as groups', 'groups.id', '=', 'user_group.group_id')
             ->where('user_group.user_id', $this->getKey())
             ->where('user_group.flag', 1)
-            ->where('groups.username', $username)
+            ->whereIn('groups.username', array_values(config('sso.role_groups')))
             ->where('groups.is_group', 1)
             ->where('groups.is_active', 1)
-            ->exists();
+            ->pluck('groups.username')
+            ->all();
+
+        foreach (config('sso.role_groups') as $role => $groupUsername) {
+            if (in_array($groupUsername, $groupUsernames, true)) {
+                return $role;
+            }
+        }
+
+        return null;
     }
 }
