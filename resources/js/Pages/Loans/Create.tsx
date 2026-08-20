@@ -6,6 +6,7 @@ import {
     FileText,
     MapPin,
     PackagePlus,
+    UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
@@ -16,10 +17,24 @@ export default function Create({
     tools,
     token,
     preselected,
+    borrowers,
+    canChooseBorrower,
+    selectedBorrowerId,
 }: {
     tools: ToolType[];
     token: { used: number; total: number };
     preselected: number[];
+    borrowers: {
+        id: number;
+        name: string;
+        email: string;
+        institution?: string;
+        role: string;
+        token_used: number;
+        token_quota: number;
+    }[];
+    canChooseBorrower: boolean;
+    selectedBorrowerId: number;
 }) {
     const [step, setStep] = useState(1);
     const [selected, setSelected] = useState<number[]>(preselected);
@@ -31,13 +46,18 @@ export default function Create({
     const [start, setStart] = useState(new Date().toISOString().slice(0, 10));
     const [due, setDue] = useState("");
     const [letter, setLetter] = useState<File | null>(null);
+    const [borrowerId, setBorrowerId] = useState(selectedBorrowerId);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
     const chosen = useMemo(
         () => tools.filter((t) => selected.includes(t.id)),
         [selected, tools],
     );
-    const left = token.total - token.used - selected.length;
+    const borrower = borrowers.find((user) => user.id === borrowerId);
+    const activeToken = borrower
+        ? { used: borrower.token_used, total: borrower.token_quota }
+        : token;
+    const left = activeToken.total - activeToken.used - selected.length;
     const toggle = (id: number) =>
         setSelected((s) =>
             s.includes(id) ? s.filter((x) => x !== id) : [...s, id],
@@ -51,6 +71,9 @@ export default function Create({
         data.append("start_date", start);
         if (due) data.append("due_date", due);
         if (letter) data.append("letter", letter);
+        if (canChooseBorrower) {
+            data.append("borrower_id", String(borrowerId));
+        }
         setProcessing(true);
         router.post("/peminjaman", data, {
             forceFormData: true,
@@ -66,9 +89,51 @@ export default function Create({
             <Head title="Pinjaman Baru" />
             <PageHeader
                 eyebrow="New loan request"
-                title="Ajukan Peminjaman"
-                description="Satu jenis alat menggunakan satu token sampai inspeksi pengembalian selesai."
+                title={canChooseBorrower ? "Input Peminjaman" : "Ajukan Peminjaman"}
+                description={
+                    canChooseBorrower
+                        ? "Buat peminjaman atas nama pengguna yang dipilih. Kuota dan histori tercatat pada peminjam."
+                        : "Satu jenis alat menggunakan satu token sampai inspeksi pengembalian selesai."
+                }
             />
+            {canChooseBorrower && (
+                <Panel className="mb-6 overflow-hidden border-l-4 !border-l-amber">
+                    <div className="grid gap-4 p-5 md:grid-cols-[auto_minmax(0,1fr)_220px] md:items-end">
+                        <span className="grid size-12 place-items-center rounded-md bg-ink text-white">
+                            <UserRound size={22} />
+                        </span>
+                        <Field
+                            label="Peminjam atas nama"
+                            error={errors.borrower_id}
+                        >
+                            <select
+                                className="control"
+                                value={borrowerId}
+                                onChange={(event) =>
+                                    setBorrowerId(Number(event.target.value))
+                                }
+                            >
+                                {borrowers.map((user) => (
+                                    <option key={user.id} value={user.id}>
+                                        {user.name} · {user.institution || user.email}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <div className="rounded-md border border-line bg-canvas/60 px-4 py-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
+                                Sisa token peminjam
+                            </p>
+                            <p className="mt-1 font-num text-2xl font-semibold">
+                                {activeToken.total - activeToken.used}
+                                <span className="text-sm text-muted">
+                                    /{activeToken.total}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                </Panel>
+            )}
             <div className="mb-6 grid grid-cols-4 overflow-hidden rounded-lg border bg-surface">
                 {["Pilih Alat", "Area Pakai", "Detail", "Tinjau"].map(
                     (label, i) => (
@@ -139,8 +204,8 @@ export default function Create({
                     </Panel>
                     <div>
                         <TokenMeter
-                            used={token.used + selected.length}
-                            total={token.total}
+                            used={activeToken.used + selected.length}
+                            total={activeToken.total}
                         />
                         <button
                             disabled={!selected.length}
@@ -284,6 +349,12 @@ export default function Create({
                             ))}
                         </div>
                         <dl className="mt-5 grid gap-4 border-t pt-5 sm:grid-cols-2">
+                            {canChooseBorrower && (
+                                <Summary
+                                    label="Peminjam"
+                                    value={borrower?.name ?? "Belum dipilih"}
+                                />
+                            )}
                             <Summary
                                 label="Area penggunaan"
                                 value={
@@ -326,7 +397,11 @@ export default function Create({
                             onClick={submit}
                             className="btn-primary mt-4 w-full"
                         >
-                            {processing ? "Mengirim..." : "Kirim Permohonan"}
+                            {processing
+                                ? "Menyimpan..."
+                                : canChooseBorrower
+                                  ? "Buat Peminjaman"
+                                  : "Kirim Permohonan"}
                             <ArrowRight size={17} />
                         </button>
                         <button

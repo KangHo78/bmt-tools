@@ -59,6 +59,64 @@ class ToolsAssetWorkflowTest extends TestCase
                 ->where('tools.0.available_count', fn ($count) => (int) $count > 0));
     }
 
+    public function test_tools_admin_can_create_a_loan_on_behalf_of_a_borrower(): void
+    {
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $borrower = User::where('email', 'user@tams.id')->firstOrFail();
+        $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $borrowerTokens = $borrower->token_used;
+        $staffTokens = $staff->token_used;
+
+        $this->actingAs($staff)
+            ->get(route('loans.create'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('canChooseBorrower', true)
+                ->where('selectedBorrowerId', $staff->id)
+                ->where('borrowers', fn ($users) => collect($users)->contains('id', $borrower->id)));
+
+        $response = $this->actingAs($staff)->post(route('loans.store'), [
+            'borrower_id' => $borrower->id,
+            'tool_type_ids' => [$type->id],
+            'usage_type' => 'dalam_area',
+            'purpose' => 'Pekerjaan yang diinput petugas',
+            'location_text' => 'Workshop Trowulan',
+            'start_date' => now()->addDay()->toDateString(),
+        ]);
+
+        $loan = Loan::latest('id')->firstOrFail();
+        $response->assertRedirect(route('loans.show', $loan));
+        $this->assertSame($borrower->id, $loan->user_id);
+        $this->assertSame($borrowerTokens + 1, $borrower->fresh()->token_used);
+        $this->assertSame($staffTokens, $staff->fresh()->token_used);
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $borrower->id,
+            'object_type' => 'loan',
+            'object_id' => $loan->id,
+        ]);
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $staff->id,
+            'action' => 'loan.created',
+            'subject_id' => $loan->id,
+        ]);
+    }
+
+    public function test_borrower_cannot_create_a_loan_for_another_user(): void
+    {
+        $borrower = User::where('email', 'user@tams.id')->firstOrFail();
+        $other = User::where('email', 'andi@tams.id')->firstOrFail();
+        $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+
+        $this->actingAs($borrower)->post(route('loans.store'), [
+            'borrower_id' => $other->id,
+            'tool_type_ids' => [$type->id],
+            'usage_type' => 'dalam_area',
+            'purpose' => 'Percobaan manipulasi peminjam',
+            'location_text' => 'Workshop Trowulan',
+            'start_date' => now()->addDay()->toDateString(),
+        ])->assertSessionHasErrors('borrower_id');
+    }
+
     public function test_external_loan_requires_a_letter_and_head_approval(): void
     {
         $user = User::where('email', 'andi@tams.id')->firstOrFail();

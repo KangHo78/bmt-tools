@@ -4,18 +4,24 @@ namespace App\Http\Controllers;
 
 use App\Models\Loan;
 use App\Models\LoanExtension;
+use App\Models\SsoUser;
 use App\Models\SystemNotification;
 use App\Models\ToolType;
 use App\Models\User;
 use App\Services\LoanService;
+use App\Services\SsoUserSynchronizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class LoanController extends Controller
 {
-    public function __construct(private LoanService $service) {}
+    public function __construct(
+        private LoanService $service,
+        private SsoUserSynchronizer $ssoSynchronizer,
+    ) {}
 
     public function index(Request $request)
     {
@@ -32,6 +38,16 @@ class LoanController extends Controller
 
     public function create(Request $request)
     {
+        $canChooseBorrower = $request->user()->hasRole('petugas', 'admin');
+        $borrowers = collect();
+
+        if ($canChooseBorrower) {
+            $borrowers = config('sso.enabled')
+                ? SsoUser::managementUsers()->map(fn (SsoUser $ssoUser) => $this->ssoSynchronizer->synchronize($ssoUser, $ssoUser->managementRole()))
+                : User::query()->where('is_active', true)->orderBy('name')->get();
+            $borrowers = $borrowers->filter->is_active;
+        }
+
         return Inertia::render('Loans/Create', [
             'tools' => ToolType::query()
                 ->whereHas('units', fn ($query) => $query->where('status', 'tersedia'))
@@ -40,21 +56,50 @@ class LoanController extends Controller
                 ->get(),
             'token' => ['used' => $request->user()->token_used, 'total' => $request->user()->token_quota],
             'preselected' => array_filter([(int) $request->query('tool')]),
+            'canChooseBorrower' => $canChooseBorrower,
+            'selectedBorrowerId' => $request->user()->id,
+            'borrowers' => $borrowers->sortBy('name')->values()->map->only([
+                'id', 'name', 'email', 'institution', 'role', 'token_used', 'token_quota',
+            ]),
         ]);
     }
 
     public function store(Request $request)
     {
+        $canChooseBorrower = $request->user()->hasRole('petugas', 'admin');
         $data = $request->validate([
             'tool_type_ids' => ['required', 'array', 'min:1'], 'tool_type_ids.*' => ['integer', 'distinct', 'exists:tool_types,id'],
             'usage_type' => ['required', Rule::in(['dalam_area', 'luar_area'])], 'purpose' => ['required', 'string', 'max:1000'],
             'location_text' => ['required', 'string', 'max:255'], 'start_date' => ['required', 'date', 'after_or_equal:today'],
             'due_date' => ['nullable', 'required_if:usage_type,luar_area', 'date', 'after_or_equal:start_date'],
             'letter' => ['nullable', 'required_if:usage_type,luar_area', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'borrower_id' => $canChooseBorrower
+                ? ['required', 'integer', 'exists:users,id']
+                : ['prohibited'],
         ]);
-        $loan = $this->service->create($request->user(), $data, $request->file('letter'));
+        $borrower = $request->user();
 
-        return to_route('loans.show', $loan)->with('success', 'Permohonan berhasil dibuat.');
+        if ($canChooseBorrower) {
+            $borrower = User::query()->where('is_active', true)->findOrFail($data['borrower_id']);
+
+            if (config('sso.enabled')) {
+                $ssoUser = $borrower->sso_user_id
+                    ? SsoUser::query()->whereKey($borrower->sso_user_id)->where('is_active', 1)->where('is_group', 0)->first()
+                    : null;
+
+                if (! $ssoUser?->managementRole()) {
+                    throw ValidationException::withMessages([
+                        'borrower_id' => 'Peminjam tidak lagi memiliki grup akses Tools Management.',
+                    ]);
+                }
+            }
+        }
+
+        $loan = $this->service->create($borrower, $data, $request->file('letter'), $request->user());
+
+        return to_route('loans.show', $loan)->with('success', $borrower->is($request->user())
+            ? 'Permohonan berhasil dibuat.'
+            : "Peminjaman atas nama {$borrower->name} berhasil dibuat.");
     }
 
     public function show(Request $request, Loan $loan)

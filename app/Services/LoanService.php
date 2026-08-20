@@ -15,9 +15,9 @@ use Illuminate\Validation\ValidationException;
 
 class LoanService
 {
-    public function create(User $user, array $data, ?UploadedFile $letter): Loan
+    public function create(User $user, array $data, ?UploadedFile $letter, ?User $createdBy = null): Loan
     {
-        return DB::transaction(function () use ($user, $data, $letter) {
+        return DB::transaction(function () use ($user, $data, $letter, $createdBy) {
             $lockedUser = User::query()->lockForUpdate()->findOrFail($user->id);
             $typeIds = array_values(array_unique($data['tool_type_ids']));
             $needed = count($typeIds);
@@ -48,7 +48,16 @@ class LoanService
                 $loan->items()->create(['tool_type_id' => $typeId]);
             }
             $lockedUser->increment('token_used', $needed);
-            $this->log($user, 'loan.created', $loan, ['tokens' => $needed]);
+            $actor = $createdBy ?: $user;
+            $this->log($actor, 'loan.created', $loan, [
+                'tokens' => $needed,
+                'borrower_id' => $lockedUser->id,
+                'created_on_behalf' => ! $actor->is($lockedUser),
+            ]);
+
+            if (! $actor->is($lockedUser)) {
+                $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$actor->name} membuat {$loan->trx_no} untuk Anda.");
+            }
 
             return $loan;
         });
