@@ -48,7 +48,7 @@ class AuthenticationTest extends TestCase
 
         $this->createSsoUser(217, 'TOOLS_MANAGEMENT_USER', 'Tools Management User', null, true);
         $this->createSsoUser(218, 'TOOLS_MANAGEMENT_ADMIN', 'Tools Management Admin', null, true);
-        $this->createSsoUser(219, 'TOOLS_MANAGEMENT_ADMINISRTATOR', 'Tools Management Administrator', null, true);
+        $this->createSsoUser(219, 'TOOLS_MANAGEMENT_ADMINISTRATOR', 'Tools Management Administrator', null, true);
     }
 
     public function test_login_route_redirects_to_main_application(): void
@@ -134,7 +134,7 @@ class AuthenticationTest extends TestCase
         $this->withUnencryptedCookie('uuid', '166')->get('/dashboard')->assertOk();
         $this->assertDatabaseHas('users', ['sso_user_id' => 166, 'role' => 'petugas']);
 
-        $this->assignGroup(166, 'TOOLS_MANAGEMENT_ADMINISRTATOR');
+        $this->assignGroup(166, 'TOOLS_MANAGEMENT_ADMINISTRATOR');
 
         $this->withUnencryptedCookie('uuid', '166')->get('/dashboard')->assertOk();
         $this->assertDatabaseHas('users', ['sso_user_id' => 166, 'role' => 'admin']);
