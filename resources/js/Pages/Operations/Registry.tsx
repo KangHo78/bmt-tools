@@ -7,6 +7,7 @@ import {
     StatusBadge,
 } from "@/Components/TamsUI";
 import { formatDate } from "@/lib/ui";
+import LocationTree from "@/Components/LocationTree";
 
 export default function Registry({
     kind,
@@ -19,6 +20,26 @@ export default function Registry({
     subtitle: string;
     rows: any[];
 }) {
+    if (kind === "locations") {
+        return (
+            <TamsLayout>
+                <Head title={title} />
+                <PageHeader
+                    eyebrow="Operations registry"
+                    title={title}
+                    description={subtitle}
+                />
+                <Panel className="overflow-hidden">
+                    {rows.length ? (
+                        <LocationTree locations={rows} />
+                    ) : (
+                        <EmptyState />
+                    )}
+                </Panel>
+            </TamsLayout>
+        );
+    }
+
     return (
         <TamsLayout>
             <Head title={title} />

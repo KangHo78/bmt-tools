@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
+import LocationTree from "@/Components/LocationTree";
 import { formatDateTime, roleLabels } from "@/lib/ui";
 
 export default function Admin(props: {
@@ -523,19 +524,15 @@ function LocationsTab({ locations }: { locations: any[] }) {
     return (
         <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
             <Panel className="overflow-hidden">
-                {locations.map((x) => (
-                    <div
-                        key={x.id}
-                        className="grid grid-cols-[1fr_100px_1fr_80px] gap-3 border-b p-4 text-sm last:border-0"
-                    >
-                        <strong>{x.name}</strong>
-                        <span className="capitalize">{x.type}</span>
-                        <span className="text-muted">
-                            {x.parent?.name ?? "Root"}
-                        </span>
-                        <span className="font-num">{x.capacity ?? "—"}</span>
-                    </div>
-                ))}
+                <div className="border-b p-5">
+                    <h2 className="font-display text-2xl font-bold">
+                        Struktur Lokasi
+                    </h2>
+                    <p className="mt-1 text-sm text-muted">
+                        Area induk ditampilkan bersama seluruh ruang, rak, dan slot di bawahnya.
+                    </p>
+                </div>
+                <LocationTree locations={locations} />
             </Panel>
             <Panel className="h-fit p-5">
                 <h2 className="font-display text-2xl font-bold">Lokasi Baru</h2>
@@ -586,6 +583,9 @@ function SettingsTab({ settings }: { settings: any[] }) {
             <h2 className="font-display text-2xl font-bold">
                 Parameter Operasional
             </h2>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+                Parameter ini mengatur batas dan perilaku proses aplikasi. Alasan perubahan disimpan di Audit Trail agar perubahan konfigurasi dapat ditelusuri; isinya tidak mengubah perhitungan sistem.
+            </p>
             <div className="mt-5 space-y-4">
                 {Object.keys(d).map((key) => (
                     <Input
@@ -596,7 +596,7 @@ function SettingsTab({ settings }: { settings: any[] }) {
                     />
                 ))}
                 <Input
-                    label="Alasan perubahan"
+                    label="Alasan perubahan (catatan audit)"
                     value={reason}
                     set={setReason}
                 />

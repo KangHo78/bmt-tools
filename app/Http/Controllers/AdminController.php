@@ -20,7 +20,7 @@ class AdminController extends Controller
     {
         return Inertia::render('Operations/Admin', [
             'users' => User::orderBy('name')->get(), 'activity' => ActivityLog::with('user:id,name')->latest()->limit(30)->get(),
-            'categories' => Category::orderBy('name')->get(), 'locations' => Location::with('parent:id,name')->orderBy('name')->get(),
+            'categories' => Category::orderBy('name')->get(), 'locations' => Location::withCount('units')->with('parent:id,name')->orderBy('name')->get(),
             'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name'])->orderBy('name')->get(), 'settings' => SystemSetting::orderBy('key')->get(),
         ]);
     }
