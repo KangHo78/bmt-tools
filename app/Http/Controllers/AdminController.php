@@ -10,6 +10,7 @@ use App\Models\ToolType;
 use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -41,10 +42,31 @@ class AdminController extends Controller
 
     public function storeCategory(Request $request)
     {
-        $model = Category::create($request->validate(['name' => ['required', 'string', 'unique:categories'], 'function' => ['nullable', 'string']]));
+        $model = Category::create($this->categoryData($request));
         AuditLogger::record('category.created', $model);
 
         return back()->with('success', 'Kategori ditambahkan.');
+    }
+
+    public function updateCategory(Request $request, Category $category)
+    {
+        $before = $category->only(['name', 'function']);
+        $category->update($this->categoryData($request, $category));
+        AuditLogger::record('category.updated', $category, ['before' => $before, 'after' => $category->only(['name', 'function'])]);
+
+        return back()->with('success', 'Kategori diperbarui.');
+    }
+
+    public function destroyCategory(Category $category)
+    {
+        if ($category->toolTypes()->exists()) {
+            return back()->with('error', 'Kategori masih digunakan oleh master aset dan tidak dapat dihapus.');
+        }
+
+        AuditLogger::record('category.deleted', $category, ['name' => $category->name]);
+        $category->delete();
+
+        return back()->with('success', 'Kategori dihapus.');
     }
 
     public function storeLocation(Request $request)
@@ -57,13 +79,61 @@ class AdminController extends Controller
 
     public function storeToolType(Request $request)
     {
-        $data = $request->validate(['code' => ['required', 'string', 'max:20', 'unique:tool_types'], 'name' => ['required', 'string'], 'category_id' => ['required', 'exists:categories,id'], 'primary_location_id' => ['required', 'exists:locations,id'], 'size' => ['nullable', 'string'], 'description' => ['nullable', 'string'], 'rules_summary' => ['nullable', 'string'], 'checklist_text' => ['required', 'string']]);
-        $data['checklist'] = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $data['checklist_text']))));
-        unset($data['checklist_text']);
+        $data = $this->toolTypeData($request);
         $model = ToolType::create($data);
         AuditLogger::record('tool_type.created', $model);
 
         return back()->with('success', 'Jenis alat ditambahkan.');
+    }
+
+    public function updateToolType(Request $request, ToolType $toolType)
+    {
+        $before = $toolType->only(['code', 'name', 'category_id', 'primary_location_id', 'size', 'description', 'rules_summary', 'checklist']);
+        $toolType->update($this->toolTypeData($request, $toolType));
+        AuditLogger::record('tool_type.updated', $toolType, ['before' => $before, 'after' => $toolType->only(array_keys($before))]);
+
+        return back()->with('success', 'Master aset diperbarui.');
+    }
+
+    public function destroyToolType(ToolType $toolType)
+    {
+        $isUsed = $toolType->units()->exists()
+            || DB::table('loan_items')->where('tool_type_id', $toolType->id)->exists();
+
+        if ($isUsed) {
+            return back()->with('error', 'Master aset sudah memiliki unit atau transaksi dan tidak dapat dihapus.');
+        }
+
+        AuditLogger::record('tool_type.deleted', $toolType, ['code' => $toolType->code, 'name' => $toolType->name]);
+        $toolType->delete();
+
+        return back()->with('success', 'Master aset dihapus.');
+    }
+
+    private function categoryData(Request $request, ?Category $category = null): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('categories')->ignore($category)],
+            'function' => ['nullable', 'string', 'max:255'],
+        ]);
+    }
+
+    private function toolTypeData(Request $request, ?ToolType $toolType = null): array
+    {
+        $data = $request->validate([
+            'code' => ['required', 'string', 'max:20', Rule::unique('tool_types')->ignore($toolType)],
+            'name' => ['required', 'string', 'max:255'],
+            'category_id' => ['required', 'exists:categories,id'],
+            'primary_location_id' => ['required', 'exists:locations,id'],
+            'size' => ['nullable', 'string', 'max:255'],
+            'description' => ['nullable', 'string'],
+            'rules_summary' => ['nullable', 'string'],
+            'checklist_text' => ['required', 'string'],
+        ]);
+        $data['checklist'] = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $data['checklist_text']))));
+        unset($data['checklist_text']);
+
+        return $data;
     }
 
     public function updateSettings(Request $request)

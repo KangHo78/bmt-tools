@@ -1,5 +1,13 @@
 import { Head, router } from "@inertiajs/react";
-import { Boxes, MapPinned, Settings, Users } from "lucide-react";
+import {
+    Boxes,
+    MapPinned,
+    Pencil,
+    Settings,
+    Tags,
+    Trash2,
+    Users,
+} from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
@@ -17,6 +25,7 @@ export default function Admin(props: {
     const tabs = [
         ["users", "Pengguna", Users],
         ["master", "Master Aset", Boxes],
+        ["categories", "Kategori", Tags],
         ["locations", "Lokasi", MapPinned],
         ["settings", "Pengaturan", Settings],
         ["activity", "Audit Trail", Settings],
@@ -43,6 +52,9 @@ export default function Admin(props: {
             </div>
             {tab === "users" && <UsersTab users={props.users} />}{" "}
             {tab === "master" && <MasterTab {...props} />}{" "}
+            {tab === "categories" && (
+                <CategoriesTab categories={props.categories} />
+            )}{" "}
             {tab === "locations" && (
                 <LocationsTab locations={props.locations} />
             )}{" "}
@@ -165,6 +177,8 @@ function EditUser({ user, close }: { user: any; close: () => void }) {
     );
 }
 function MasterTab({ toolTypes, categories, locations }: any) {
+    const [edit, setEdit] = useState<any>(null);
+    const [deleting, setDeleting] = useState<any>(null);
     const [d, setD] = useState({
         code: "",
         name: "",
@@ -175,7 +189,6 @@ function MasterTab({ toolTypes, categories, locations }: any) {
         rules_summary: "",
         checklist_text: "",
     });
-    const [cat, setCat] = useState({ name: "", function: "" });
     return (
         <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
             <Panel className="overflow-hidden">
@@ -187,7 +200,7 @@ function MasterTab({ toolTypes, categories, locations }: any) {
                 {toolTypes.map((t: any) => (
                     <div
                         key={t.id}
-                        className="grid gap-2 border-b p-4 last:border-0 sm:grid-cols-[120px_1fr_180px]"
+                        className="grid gap-3 border-b p-4 last:border-0 sm:grid-cols-[120px_1fr_160px_auto] sm:items-center"
                     >
                         <span className="font-num text-xs font-bold">
                             {t.code}
@@ -199,6 +212,23 @@ function MasterTab({ toolTypes, categories, locations }: any) {
                         <span className="text-xs text-muted">
                             {t.primary_location?.name}
                         </span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setEdit(t)}
+                                className="btn-secondary !min-h-9 !px-3"
+                                aria-label={`Ubah ${t.name}`}
+                            >
+                                <Pencil size={15} />
+                                Ubah
+                            </button>
+                            <button
+                                onClick={() => setDeleting(t)}
+                                className="btn-secondary !min-h-9 !border-red/30 !px-3 !text-red"
+                                aria-label={`Hapus ${t.name}`}
+                            >
+                                <Trash2 size={15} />
+                            </button>
+                        </div>
                     </div>
                 ))}
             </Panel>
@@ -260,33 +290,227 @@ function MasterTab({ toolTypes, categories, locations }: any) {
                         </button>
                     </div>
                 </Panel>
-                <Panel className="p-5">
-                    <h2 className="font-display text-xl font-bold">
-                        Kategori Baru
-                    </h2>
-                    <div className="mt-3 space-y-3">
-                        <Input
-                            label="Nama"
-                            value={cat.name}
-                            set={(v) => setCat({ ...cat, name: v })}
-                        />
-                        <Input
-                            label="Fungsi"
-                            value={cat.function}
-                            set={(v) => setCat({ ...cat, function: v })}
-                        />
-                        <button
-                            onClick={() =>
-                                router.post("/administrasi/kategori", cat)
-                            }
-                            className="btn-secondary w-full"
-                        >
-                            Tambah Kategori
-                        </button>
-                    </div>
-                </Panel>
             </div>
+            {edit && (
+                <EditToolType
+                    tool={edit}
+                    categories={categories}
+                    locations={locations}
+                    close={() => setEdit(null)}
+                />
+            )}
+            {deleting && (
+                <ConfirmDelete
+                    title="Hapus master aset?"
+                    description={`${deleting.code} — ${deleting.name} akan dihapus. Master yang sudah memiliki unit atau transaksi akan tetap dilindungi.`}
+                    close={() => setDeleting(null)}
+                    confirm={() =>
+                        router.delete(
+                            `/administrasi/jenis-alat/${deleting.id}`,
+                            { onSuccess: () => setDeleting(null) },
+                        )
+                    }
+                />
+            )}
         </div>
+    );
+}
+function EditToolType({ tool, categories, locations, close }: any) {
+    const [d, setD] = useState({
+        code: tool.code ?? "",
+        name: tool.name ?? "",
+        category_id: String(tool.category_id ?? ""),
+        primary_location_id: String(tool.primary_location_id ?? ""),
+        size: tool.size ?? "",
+        description: tool.description ?? "",
+        rules_summary: tool.rules_summary ?? "",
+        checklist_text: (tool.checklist ?? []).join("\n"),
+    });
+    return (
+        <Modal title={`Ubah ${tool.name}`} close={close}>
+            <div className="grid gap-3 sm:grid-cols-2">
+                <Input
+                    label="Kode"
+                    value={d.code}
+                    set={(v) => setD({ ...d, code: v.toUpperCase() })}
+                />
+                <Input
+                    label="Nama"
+                    value={d.name}
+                    set={(v) => setD({ ...d, name: v })}
+                />
+                <SelectMap
+                    label="Kategori"
+                    value={d.category_id}
+                    set={(v) => setD({ ...d, category_id: v })}
+                    rows={categories}
+                />
+                <SelectMap
+                    label="Lokasi utama"
+                    value={d.primary_location_id}
+                    set={(v) => setD({ ...d, primary_location_id: v })}
+                    rows={locations}
+                />
+                <Input
+                    label="Ukuran/spesifikasi"
+                    value={d.size}
+                    set={(v) => setD({ ...d, size: v })}
+                />
+                <div />
+                <Textarea
+                    label="Deskripsi"
+                    value={d.description}
+                    set={(v) => setD({ ...d, description: v })}
+                />
+                <Textarea
+                    label="Aturan peminjaman"
+                    value={d.rules_summary}
+                    set={(v) => setD({ ...d, rules_summary: v })}
+                />
+                <div className="sm:col-span-2">
+                    <Textarea
+                        label="Checklist, satu per baris"
+                        value={d.checklist_text}
+                        set={(v) => setD({ ...d, checklist_text: v })}
+                    />
+                </div>
+            </div>
+            <button
+                onClick={() =>
+                    router.put(`/administrasi/jenis-alat/${tool.id}`, d, {
+                        onSuccess: close,
+                    })
+                }
+                className="btn-primary mt-5 w-full"
+            >
+                Simpan Perubahan
+            </button>
+        </Modal>
+    );
+}
+function CategoriesTab({ categories }: { categories: any[] }) {
+    const [d, setD] = useState({ name: "", function: "" });
+    const [edit, setEdit] = useState<any>(null);
+    const [deleting, setDeleting] = useState<any>(null);
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <Panel className="overflow-hidden">
+                <div className="border-b p-5">
+                    <h2 className="font-display text-2xl font-bold">
+                        Kategori Aset
+                    </h2>
+                    <p className="mt-1 text-sm text-muted">
+                        Kelompokkan master aset berdasarkan fungsi penggunaan.
+                    </p>
+                </div>
+                {categories.map((category) => (
+                    <div
+                        key={category.id}
+                        className="grid gap-3 border-b p-4 last:border-0 sm:grid-cols-[1fr_1fr_auto] sm:items-center"
+                    >
+                        <strong>{category.name}</strong>
+                        <span className="text-sm text-muted">
+                            {category.function || "Belum ada keterangan fungsi"}
+                        </span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setEdit(category)}
+                                className="btn-secondary !min-h-9 !px-3"
+                            >
+                                <Pencil size={15} />
+                                Ubah
+                            </button>
+                            <button
+                                onClick={() => setDeleting(category)}
+                                className="btn-secondary !min-h-9 !border-red/30 !px-3 !text-red"
+                                aria-label={`Hapus ${category.name}`}
+                            >
+                                <Trash2 size={15} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </Panel>
+            <Panel className="h-fit p-5">
+                <h2 className="font-display text-2xl font-bold">
+                    Kategori Baru
+                </h2>
+                <div className="mt-4 space-y-3">
+                    <Input
+                        label="Nama"
+                        value={d.name}
+                        set={(v) => setD({ ...d, name: v })}
+                    />
+                    <Input
+                        label="Fungsi"
+                        value={d.function}
+                        set={(v) => setD({ ...d, function: v })}
+                    />
+                    <button
+                        onClick={() =>
+                            router.post("/administrasi/kategori", d, {
+                                onSuccess: () =>
+                                    setD({ name: "", function: "" }),
+                            })
+                        }
+                        className="btn-primary w-full"
+                    >
+                        Tambah Kategori
+                    </button>
+                </div>
+            </Panel>
+            {edit && (
+                <EditCategory
+                    category={edit}
+                    close={() => setEdit(null)}
+                />
+            )}
+            {deleting && (
+                <ConfirmDelete
+                    title="Hapus kategori?"
+                    description={`${deleting.name} akan dihapus. Kategori yang masih digunakan master aset akan tetap dilindungi.`}
+                    close={() => setDeleting(null)}
+                    confirm={() =>
+                        router.delete(
+                            `/administrasi/kategori/${deleting.id}`,
+                            { onSuccess: () => setDeleting(null) },
+                        )
+                    }
+                />
+            )}
+        </div>
+    );
+}
+function EditCategory({ category, close }: any) {
+    const [d, setD] = useState({
+        name: category.name ?? "",
+        function: category.function ?? "",
+    });
+    return (
+        <Modal title={`Ubah ${category.name}`} close={close}>
+            <div className="space-y-3">
+                <Input
+                    label="Nama"
+                    value={d.name}
+                    set={(v) => setD({ ...d, name: v })}
+                />
+                <Input
+                    label="Fungsi"
+                    value={d.function}
+                    set={(v) => setD({ ...d, function: v })}
+                />
+            </div>
+            <button
+                onClick={() =>
+                    router.put(`/administrasi/kategori/${category.id}`, d, {
+                        onSuccess: close,
+                    })
+                }
+                className="btn-primary mt-5 w-full"
+            >
+                Simpan Perubahan
+            </button>
+        </Modal>
     );
 }
 function LocationsTab({ locations }: { locations: any[] }) {
@@ -425,6 +649,59 @@ function Modal({
                 {children}
             </Panel>
         </div>
+    );
+}
+function ConfirmDelete({
+    title,
+    description,
+    close,
+    confirm,
+}: {
+    title: string;
+    description: string;
+    close: () => void;
+    confirm: () => void;
+}) {
+    return (
+        <Modal title={title} close={close}>
+            <div className="border-l-4 border-red bg-red/5 p-4">
+                <p className="text-sm leading-relaxed text-ink">
+                    {description}
+                </p>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+                <button onClick={close} className="btn-secondary">
+                    Batal
+                </button>
+                <button
+                    onClick={confirm}
+                    className="btn-primary !border-red !bg-red !text-white"
+                >
+                    <Trash2 size={16} />
+                    Hapus
+                </button>
+            </div>
+        </Modal>
+    );
+}
+function Textarea({
+    label,
+    value,
+    set,
+}: {
+    label: string;
+    value: string;
+    set: (v: string) => void;
+}) {
+    return (
+        <label>
+            <span className="label">{label}</span>
+            <textarea
+                className="control min-h-24 resize-y"
+                value={value}
+                onChange={(e) => set(e.target.value)}
+            />
+        </label>
     );
 }
 function Input({

@@ -88,8 +88,12 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::get('/administrasi', [AdminController::class, 'index'])->name('admin.index');
         Route::post('/administrasi/pengguna/{user}', [AdminController::class, 'updateUser'])->name('admin.users.update');
         Route::post('/administrasi/kategori', [AdminController::class, 'storeCategory'])->name('admin.categories.store');
+        Route::put('/administrasi/kategori/{category}', [AdminController::class, 'updateCategory'])->name('admin.categories.update');
+        Route::delete('/administrasi/kategori/{category}', [AdminController::class, 'destroyCategory'])->name('admin.categories.destroy');
         Route::post('/administrasi/lokasi', [AdminController::class, 'storeLocation'])->name('admin.locations.store');
         Route::post('/administrasi/jenis-alat', [AdminController::class, 'storeToolType'])->name('admin.tool-types.store');
+        Route::put('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'updateToolType'])->name('admin.tool-types.update');
+        Route::delete('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'destroyToolType'])->name('admin.tool-types.destroy');
         Route::post('/administrasi/pengaturan', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
     });
     Route::get('/api/search', [SearchController::class, 'search'])->name('search');
