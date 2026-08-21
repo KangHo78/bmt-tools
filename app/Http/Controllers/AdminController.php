@@ -7,6 +7,7 @@ use App\Models\Borrower;
 use App\Models\Category;
 use App\Models\Location;
 use App\Models\PhysicalToken;
+use App\Models\SsoItem;
 use App\Models\SystemSetting;
 use App\Models\ToolType;
 use App\Models\User;
@@ -26,6 +27,9 @@ class AdminController extends Controller
             'borrowers' => Borrower::with(['user:id,email', 'tokens' => fn ($query) => $query->orderBy('code')])->orderBy('name')->get(),
             'categories' => Category::orderBy('name')->get(), 'locations' => Location::withCount('units')->with('parent:id,name')->orderBy('name')->get(),
             'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name'])->orderBy('name')->get(), 'settings' => SystemSetting::orderBy('key')->get(),
+            'masterItems' => SsoItem::tools()->orderBy('item_no')->get([
+                'id', 'item_no', 'item_name', 'manufacture_pn', 'original_manufacture', 'article_no', 'unit',
+            ]),
         ]);
     }
 
@@ -206,15 +210,46 @@ class AdminController extends Controller
     private function toolTypeData(Request $request, ?ToolType $toolType = null): array
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'max:20', Rule::unique('tool_types')->ignore($toolType)],
-            'name' => ['required', 'string', 'max:255'],
+            'sso_item_id' => [$toolType ? 'nullable' : 'required', 'integer'],
             'category_id' => ['required', 'exists:categories,id'],
             'primary_location_id' => ['required', 'exists:locations,id'],
-            'size' => ['nullable', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
             'rules_summary' => ['nullable', 'string'],
             'checklist_text' => ['required', 'string'],
         ]);
+        $sourceId = $data['sso_item_id'] ?? $toolType?->sso_item_id;
+        if ($sourceId) {
+            $source = SsoItem::tools()->find($sourceId);
+            if (! $source) {
+                throw ValidationException::withMessages(['sso_item_id' => 'Master item tidak ditemukan atau bukan item Tool aktif.']);
+            }
+            $duplicate = ToolType::query()
+                ->where(fn ($query) => $query->where('sso_item_id', $source->id)->orWhere('code', $source->item_no))
+                ->when($toolType, fn ($query) => $query->where('id', '!=', $toolType->id))
+                ->exists();
+            if ($duplicate) {
+                throw ValidationException::withMessages(['sso_item_id' => "Item {$source->item_no} sudah digunakan sebagai master aset."]);
+            }
+            $data = array_merge($data, [
+                'sso_item_id' => $source->id,
+                'code' => $source->item_no,
+                'name' => $source->item_name,
+                'manufacture_pn' => $source->manufacture_pn,
+                'original_manufacture' => $source->original_manufacture,
+                'article_no' => $source->article_no,
+                'unit' => $source->unit,
+                'size' => $source->article_no,
+                'description' => $source->specification,
+                'image_url' => $source->datasheet,
+            ]);
+        } else {
+            $legacy = $request->validate([
+                'code' => ['required', 'string', 'max:20', Rule::unique('tool_types')->ignore($toolType)],
+                'name' => ['required', 'string', 'max:255'],
+                'size' => ['nullable', 'string', 'max:255'],
+                'description' => ['nullable', 'string'],
+            ]);
+            $data = array_merge($data, $legacy);
+        }
         $data['checklist'] = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $data['checklist_text']))));
         unset($data['checklist_text']);
 

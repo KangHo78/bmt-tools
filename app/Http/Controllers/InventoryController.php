@@ -58,10 +58,10 @@ class InventoryController extends Controller
                 }
                 $item = $receipt->items()->create($row);
                 $type = ToolType::lockForUpdate()->findOrFail($row['tool_type_id']);
+                $sequence = 1;
                 for ($i = 0; $i < $row['received_quantity']; $i++) {
-                    $sequence = ToolUnit::where('tool_type_id', $type->id)->count() + 1;
                     do {
-                        $code = sprintf('%s-%s-%04d', $type->code, now()->format('Y'), $sequence++);
+                        $code = sprintf('%s.%d', $type->code, $sequence++);
                     } while (ToolUnit::where('asset_code', $code)->exists());
                     ToolUnit::create(['tool_type_id' => $type->id, 'asset_receipt_item_id' => $item->id, 'asset_code' => $code, 'status' => $row['initial_condition'] === 'rusak' ? 'rusak' : 'tersedia', 'condition' => $row['initial_condition'], 'location_id' => $row['location_id'], 'owner' => $data['owner_institution'], 'received_at' => $data['received_date']]);
                 }

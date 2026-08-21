@@ -47,6 +47,10 @@ class FunctionalPrdTest extends TestCase
         $this->assertSame(2, ToolUnit::where('tool_type_id', $type->id)->count() - $before);
         $this->assertCount(2, $receipt->items->first()->units);
         $this->assertSame(2, $receipt->items->first()->units->pluck('asset_code')->unique()->count());
+        $this->assertSame(
+            [$type->code.'.1', $type->code.'.2'],
+            $receipt->items->first()->units->pluck('asset_code')->sort()->values()->all(),
+        );
         $this->actingAs($staff)->get(route('inventory.labels', $receipt))->assertOk();
         $this->assertDatabaseHas('activity_logs', ['action' => 'asset.received', 'subject_id' => $receipt->id]);
     }

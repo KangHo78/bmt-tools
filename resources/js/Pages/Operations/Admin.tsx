@@ -26,6 +26,7 @@ export default function Admin(props: {
     categories: any[];
     locations: any[];
     toolTypes: any[];
+    masterItems: any[];
     settings: any[];
 }) {
     const [tab, setTab] = useState("users");
@@ -455,19 +456,19 @@ function EditUser({ user, close }: { user: any; close: () => void }) {
         </Modal>
     );
 }
-function MasterTab({ toolTypes, categories, locations }: any) {
+function MasterTab({ toolTypes, masterItems, categories, locations }: any) {
     const [edit, setEdit] = useState<any>(null);
     const [deleting, setDeleting] = useState<any>(null);
     const [d, setD] = useState({
-        code: "",
-        name: "",
+        sso_item_id: "",
         category_id: "",
         primary_location_id: "",
-        size: "",
-        description: "",
         rules_summary: "",
         checklist_text: "",
     });
+    const selectedItem = masterItems.find(
+        (item: any) => String(item.id) === String(d.sso_item_id),
+    );
     return (
         <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
             <Panel className="overflow-hidden">
@@ -516,17 +517,41 @@ function MasterTab({ toolTypes, categories, locations }: any) {
                     <h2 className="font-display text-2xl font-bold">
                         Jenis Baru
                     </h2>
+                    <p className="mt-1 text-sm text-muted">
+                        Nama dan kode mengikuti Master Item Buana Multi.
+                    </p>
                     <div className="mt-4 space-y-3">
-                        <Input
-                            label="Kode"
-                            value={d.code}
-                            set={(v) => setD({ ...d, code: v.toUpperCase() })}
-                        />
-                        <Input
-                            label="Nama"
-                            value={d.name}
-                            set={(v) => setD({ ...d, name: v })}
-                        />
+                        <label>
+                            <span className="label">Master item</span>
+                            <SearchableSelect
+                                value={d.sso_item_id}
+                                onChange={(event) =>
+                                    setD({
+                                        ...d,
+                                        sso_item_id: event.target.value,
+                                    })
+                                }
+                            >
+                                <option value="">Pilih item Tool...</option>
+                                {masterItems.map((item: any) => (
+                                    <option
+                                        key={item.id}
+                                        value={item.id}
+                                        disabled={toolTypes.some(
+                                            (tool: any) =>
+                                                tool.sso_item_id === item.id ||
+                                                tool.code === item.item_no,
+                                        )}
+                                    >
+                                        {item.item_no} · {item.item_name} ·{" "}
+                                        {item.manufacture_pn || "Tanpa PN"}
+                                    </option>
+                                ))}
+                            </SearchableSelect>
+                        </label>
+                        {selectedItem && (
+                            <MasterItemPreview item={selectedItem} />
+                        )}
                         <SelectMap
                             label="Kategori"
                             value={d.category_id}
@@ -539,10 +564,10 @@ function MasterTab({ toolTypes, categories, locations }: any) {
                             set={(v) => setD({ ...d, primary_location_id: v })}
                             rows={locations}
                         />
-                        <Input
-                            label="Ukuran/spesifikasi"
-                            value={d.size}
-                            set={(v) => setD({ ...d, size: v })}
+                        <Textarea
+                            label="Aturan peminjaman"
+                            value={d.rules_summary}
+                            set={(v) => setD({ ...d, rules_summary: v })}
                         />
                         <label>
                             <span className="label">
@@ -560,6 +585,12 @@ function MasterTab({ toolTypes, categories, locations }: any) {
                             />
                         </label>
                         <button
+                            disabled={
+                                !d.sso_item_id ||
+                                !d.category_id ||
+                                !d.primary_location_id ||
+                                !d.checklist_text
+                            }
                             onClick={() =>
                                 router.post("/administrasi/jenis-alat", d)
                             }
@@ -573,6 +604,7 @@ function MasterTab({ toolTypes, categories, locations }: any) {
             {edit && (
                 <EditToolType
                     tool={edit}
+                    masterItems={masterItems}
                     categories={categories}
                     locations={locations}
                     close={() => setEdit(null)}
@@ -594,30 +626,52 @@ function MasterTab({ toolTypes, categories, locations }: any) {
         </div>
     );
 }
-function EditToolType({ tool, categories, locations, close }: any) {
+function EditToolType({
+    tool,
+    masterItems,
+    categories,
+    locations,
+    close,
+}: any) {
+    const matchedSource = masterItems.find(
+        (item: any) =>
+            item.id === tool.sso_item_id || item.item_no === tool.code,
+    );
     const [d, setD] = useState({
-        code: tool.code ?? "",
-        name: tool.name ?? "",
+        sso_item_id: String(matchedSource?.id ?? ""),
         category_id: String(tool.category_id ?? ""),
         primary_location_id: String(tool.primary_location_id ?? ""),
-        size: tool.size ?? "",
-        description: tool.description ?? "",
         rules_summary: tool.rules_summary ?? "",
         checklist_text: (tool.checklist ?? []).join("\n"),
     });
+    const selectedItem = masterItems.find(
+        (item: any) => String(item.id) === String(d.sso_item_id),
+    );
     return (
         <Modal title={`Ubah ${tool.name}`} close={close}>
             <div className="grid gap-3 sm:grid-cols-2">
-                <Input
-                    label="Kode"
-                    value={d.code}
-                    set={(v) => setD({ ...d, code: v.toUpperCase() })}
-                />
-                <Input
-                    label="Nama"
-                    value={d.name}
-                    set={(v) => setD({ ...d, name: v })}
-                />
+                <label className="sm:col-span-2">
+                    <span className="label">Master item</span>
+                    <SearchableSelect
+                        value={d.sso_item_id}
+                        onChange={(event) =>
+                            setD({ ...d, sso_item_id: event.target.value })
+                        }
+                    >
+                        <option value="">Pilih item Tool...</option>
+                        {masterItems.map((item: any) => (
+                            <option key={item.id} value={item.id}>
+                                {item.item_no} · {item.item_name} ·{" "}
+                                {item.manufacture_pn || "Tanpa PN"}
+                            </option>
+                        ))}
+                    </SearchableSelect>
+                </label>
+                {selectedItem && (
+                    <div className="sm:col-span-2">
+                        <MasterItemPreview item={selectedItem} />
+                    </div>
+                )}
                 <SelectMap
                     label="Kategori"
                     value={d.category_id}
@@ -629,17 +683,6 @@ function EditToolType({ tool, categories, locations, close }: any) {
                     value={d.primary_location_id}
                     set={(v) => setD({ ...d, primary_location_id: v })}
                     rows={locations}
-                />
-                <Input
-                    label="Ukuran/spesifikasi"
-                    value={d.size}
-                    set={(v) => setD({ ...d, size: v })}
-                />
-                <div />
-                <Textarea
-                    label="Deskripsi"
-                    value={d.description}
-                    set={(v) => setD({ ...d, description: v })}
                 />
                 <Textarea
                     label="Aturan peminjaman"
@@ -665,6 +708,43 @@ function EditToolType({ tool, categories, locations, close }: any) {
                 Simpan Perubahan
             </button>
         </Modal>
+    );
+}
+function MasterItemPreview({ item }: { item: any }) {
+    return (
+        <div className="rounded-md border border-green/20 bg-green/5 p-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="font-num text-xs font-bold text-green">
+                        {item.item_no}
+                    </p>
+                    <p className="font-display text-xl font-bold">
+                        {item.item_name}
+                    </p>
+                </div>
+                <span className="rounded bg-ink px-2 py-1 font-num text-[10px] text-white">
+                    {item.unit || "-"}
+                </span>
+            </div>
+            <dl className="mt-3 grid gap-2 border-t border-green/15 pt-3 text-xs sm:grid-cols-2">
+                <div>
+                    <dt className="text-muted">Manufacture PN</dt>
+                    <dd className="font-semibold">
+                        {item.manufacture_pn || "-"}
+                    </dd>
+                </div>
+                <div>
+                    <dt className="text-muted">Original Manufacture</dt>
+                    <dd className="font-semibold">
+                        {item.original_manufacture || "-"}
+                    </dd>
+                </div>
+                <div className="sm:col-span-2">
+                    <dt className="text-muted">Article / ukuran</dt>
+                    <dd className="font-semibold">{item.article_no || "-"}</dd>
+                </div>
+            </dl>
+        </div>
     );
 }
 function CategoriesTab({ categories }: { categories: any[] }) {

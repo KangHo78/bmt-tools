@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Category;
 use App\Models\Location;
+use App\Models\SsoItem;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Models\User;
@@ -13,6 +14,31 @@ use Tests\TestCase;
 class AdminMasterDataTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_administrator_creates_master_asset_from_buana_multi_item(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $category = Category::create(['name' => 'Welding Tools']);
+        $location = Location::create(['name' => 'Ruang Tools', 'type' => 'ruang']);
+        $source = SsoItem::tools()->where('item_no', '603840')->firstOrFail();
+
+        $this->actingAs($admin)->post(route('admin.tool-types.store'), [
+            'sso_item_id' => $source->id,
+            'category_id' => $category->id,
+            'primary_location_id' => $location->id,
+            'rules_summary' => 'Digunakan sesuai prosedur welding.',
+            'checklist_text' => "Kondisi fisik\nKelengkapan",
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('tool_types', [
+            'sso_item_id' => $source->id,
+            'code' => $source->item_no,
+            'name' => $source->item_name,
+            'manufacture_pn' => $source->manufacture_pn,
+            'article_no' => $source->article_no,
+            'unit' => $source->unit,
+        ]);
+    }
 
     public function test_administrator_can_update_and_delete_unused_master_data(): void
     {
