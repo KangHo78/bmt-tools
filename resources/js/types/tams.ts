@@ -10,7 +10,7 @@ export interface User {
     token_used: number;
 }
 export interface PageProps {
-    auth: { user: User };
+    auth: { user: User; canApprove: boolean };
     flash: { success?: string; error?: string };
     unreadCount: number;
     [key: string]: unknown;

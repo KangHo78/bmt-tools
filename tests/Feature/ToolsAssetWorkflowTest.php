@@ -215,6 +215,51 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->assertSame($head->id, $loan->fresh()->approved_by_id);
     }
 
+    public function test_admin_can_choose_exactly_who_may_approve(): void
+    {
+        $admin = User::where('email', 'admin@tams.id')->firstOrFail();
+        $head = User::where('email', 'kepala@tams.id')->firstOrFail();
+        $loan = Loan::where('trx_no', 'TRX-1058')->firstOrFail();
+
+        $this->actingAs($admin)
+            ->post(route('admin.approvers.update'), [
+                'user_ids' => [$admin->id],
+                'reason' => 'Delegasi approval kepada admin utama',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('system_settings', [
+            'key' => 'approval_user_ids',
+            'value' => json_encode([$admin->id]),
+        ]);
+        $this->actingAs($head)->get(route('approvals.index'))->assertForbidden();
+        $this->actingAs($head)->post(route('loans.approve', $loan))->assertForbidden();
+
+        $this->actingAs($admin)->get(route('approvals.index'))->assertOk();
+        $this->actingAs($admin)->post(route('loans.approve', $loan))->assertRedirect();
+        $this->assertSame($admin->id, $loan->fresh()->approved_by_id);
+    }
+
+    public function test_approver_configuration_requires_at_least_one_eligible_user(): void
+    {
+        $admin = User::where('email', 'admin@tams.id')->firstOrFail();
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+
+        $this->actingAs($admin)
+            ->post(route('admin.approvers.update'), [
+                'user_ids' => [$staff->id],
+                'reason' => 'Mencoba user yang tidak eligible',
+            ])
+            ->assertSessionHasErrors('user_ids');
+
+        $this->actingAs($admin)
+            ->post(route('admin.approvers.update'), [
+                'user_ids' => [],
+                'reason' => 'Mencoba mengosongkan approver',
+            ])
+            ->assertSessionHasErrors('user_ids');
+    }
+
     public function test_complete_handover_and_return_releases_token(): void
     {
         $loan = Loan::where('trx_no', 'TRX-1058')->firstOrFail();

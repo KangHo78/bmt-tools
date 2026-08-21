@@ -55,13 +55,18 @@ const nav = [
 
 export default function TamsLayout({ children }: PropsWithChildren) {
     const page = usePage<PageProps>();
-    const { user } = page.props.auth;
+    const { user, canApprove } = page.props.auth;
     const [menu, setMenu] = useState(false);
     const [search, setSearch] = useState(false);
     const [scan, setScan] = useState(false);
     const items = useMemo(
-        () => nav.filter((x) => x[3].includes(user.role)),
-        [user.role],
+        () =>
+            nav.filter(
+                (x) =>
+                    x[3].includes(user.role) &&
+                    (x[0] !== "/approval" || canApprove),
+            ),
+        [user.role, canApprove],
     );
     useEffect(() => setMenu(false), [page.url]);
     return (

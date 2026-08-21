@@ -44,12 +44,15 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
     Route::post('/notifikasi/baca-semua', [NotificationController::class, 'readAll'])->name('notifications.read-all');
     Route::post('/notifikasi/{notification}/baca', [NotificationController::class, 'read'])->name('notifications.read');
 
-    Route::middleware('role:kepala_logistik,admin')->group(function () {
+    Route::middleware('approver')->group(function () {
         Route::get('/approval', [OperationsController::class, 'approvals'])->name('approvals.index');
         Route::post('/peminjaman/{loan}/setujui', [LoanController::class, 'approve'])->name('loans.approve');
         Route::post('/peminjaman/{loan}/tolak', [LoanController::class, 'reject'])->name('loans.reject');
         Route::post('/perpanjangan/{extension}/setujui', [LoanController::class, 'approveExtension'])->name('extensions.approve');
         Route::post('/perpanjangan/{extension}/tolak', [LoanController::class, 'rejectExtension'])->name('extensions.reject');
+    });
+
+    Route::middleware('role:kepala_logistik,admin')->group(function () {
         Route::get('/laporan', [OperationsController::class, 'reports'])->name('reports.index');
         Route::get('/laporan/ekspor/{type}', [ReportController::class, 'export'])->name('reports.export');
     });
@@ -99,6 +102,7 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::put('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'updateToolType'])->name('admin.tool-types.update');
         Route::delete('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'destroyToolType'])->name('admin.tool-types.destroy');
         Route::post('/administrasi/pengaturan', [AdminController::class, 'updateSettings'])->name('admin.settings.update');
+        Route::post('/administrasi/approver', [AdminController::class, 'updateApprovers'])->name('admin.approvers.update');
     });
     Route::get('/api/search', [SearchController::class, 'search'])->name('search');
     Route::get('/api/scan', [SearchController::class, 'scan'])->name('scan');

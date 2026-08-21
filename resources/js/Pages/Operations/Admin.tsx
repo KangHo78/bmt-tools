@@ -1,4 +1,4 @@
-import { Head, router } from "@inertiajs/react";
+import { Head, router, useForm } from "@inertiajs/react";
 import {
     ArrowRight,
     Boxes,
@@ -7,6 +7,7 @@ import {
     Pencil,
     Plus,
     Settings,
+    ShieldCheck,
     Tags,
     Trash2,
     Users,
@@ -39,6 +40,8 @@ export default function Admin(props: {
     toolTypes: any[];
     masterItems: any[];
     settings: any[];
+    approvalCandidates: any[];
+    approvalUserIds: number[];
 }) {
     const [tab, setTab] = useState("users");
     const tabs = [
@@ -47,6 +50,7 @@ export default function Admin(props: {
         ["master", "Master Aset", Boxes],
         ["categories", "Kategori", Tags],
         ["locations", "Lokasi", MapPinned],
+        ["approvers", "Approval", ShieldCheck],
         ["settings", "Pengaturan", Settings],
         ["activity", "Audit Trail", Settings],
     ];
@@ -81,9 +85,128 @@ export default function Admin(props: {
             {tab === "locations" && (
                 <LocationsTab locations={props.locations} />
             )}{" "}
+            {tab === "approvers" && (
+                <ApproversTab
+                    candidates={props.approvalCandidates}
+                    initialIds={props.approvalUserIds}
+                />
+            )}{" "}
             {tab === "settings" && <SettingsTab settings={props.settings} />}{" "}
             {tab === "activity" && <Activity rows={props.activity} />}
         </TamsLayout>
+    );
+}
+function ApproversTab({
+    candidates,
+    initialIds,
+}: {
+    candidates: any[];
+    initialIds: number[];
+}) {
+    const form = useForm({ user_ids: initialIds, reason: "" });
+    const toggle = (id: number) => {
+        form.setData(
+            "user_ids",
+            form.data.user_ids.includes(id)
+                ? form.data.user_ids.filter((userId) => userId !== id)
+                : [...form.data.user_ids, id],
+        );
+    };
+
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <Panel className="overflow-hidden">
+                <div className="border-b bg-ink p-6 text-white">
+                    <div className="flex items-start gap-4">
+                        <div className="grid size-11 shrink-0 place-items-center rounded-md border border-amber/50 bg-amber text-ink">
+                            <ShieldCheck size={23} />
+                        </div>
+                        <div>
+                            <p className="font-num text-[10px] font-bold uppercase tracking-[.18em] text-amber">
+                                Decision authority
+                            </p>
+                            <h2 className="mt-1 font-display text-3xl font-bold">
+                                Penanggung Jawab Approval
+                            </h2>
+                            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/65">
+                                Pilih akun yang berhak melihat antrean serta
+                                menyetujui atau menolak pinjaman dan
+                                perpanjangan luar area.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="divide-y">
+                    {candidates.map((user) => {
+                        const selected = form.data.user_ids.includes(user.id);
+                        return (
+                            <button
+                                type="button"
+                                key={user.id}
+                                onClick={() => toggle(user.id)}
+                                className={`grid w-full gap-3 p-5 text-left transition-colors sm:grid-cols-[auto_1fr_auto] sm:items-center ${selected ? "bg-green/10" : "hover:bg-canvas"}`}
+                            >
+                                <span
+                                    className={`grid size-6 place-items-center rounded border-2 ${selected ? "border-green bg-green text-white" : "border-line bg-surface"}`}
+                                >
+                                    {selected && <ShieldCheck size={14} />}
+                                </span>
+                                <span>
+                                    <strong className="block">{user.name}</strong>
+                                    <small className="mt-1 block text-muted">
+                                        {user.email} · {user.institution || "Tanpa unit kerja"}
+                                    </small>
+                                </span>
+                                <StatusBadge status={user.role} />
+                            </button>
+                        );
+                    })}
+                    {!candidates.length && (
+                        <p className="p-8 text-center text-sm text-muted">
+                            Belum ada Kepala Logistik atau Administrator aktif.
+                        </p>
+                    )}
+                </div>
+            </Panel>
+            <Panel className="h-fit border-t-4 !border-t-amber p-5">
+                <p className="font-num text-xs font-bold text-muted">
+                    {form.data.user_ids.length} APPROVER DIPILIH
+                </p>
+                <h3 className="mt-2 font-display text-2xl font-bold">
+                    Simpan Kewenangan
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                    Minimal satu approver wajib aktif agar permohonan tidak
+                    tertahan tanpa pengambil keputusan.
+                </p>
+                <div className="mt-5">
+                    <Input
+                        label="Alasan perubahan (catatan audit)"
+                        value={form.data.reason}
+                        set={(value) => form.setData("reason", value)}
+                    />
+                    {form.errors.user_ids && (
+                        <p className="mt-2 text-xs font-semibold text-red">
+                            {form.errors.user_ids}
+                        </p>
+                    )}
+                    {form.errors.reason && (
+                        <p className="mt-2 text-xs font-semibold text-red">
+                            {form.errors.reason}
+                        </p>
+                    )}
+                </div>
+                <button
+                    type="button"
+                    disabled={form.processing || form.data.user_ids.length < 1}
+                    onClick={() => form.post("/administrasi/approver")}
+                    className="btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                    <ShieldCheck size={17} />
+                    {form.processing ? "Menyimpan..." : "Simpan Approver"}
+                </button>
+            </Panel>
+        </div>
     );
 }
 function BorrowersTab({ borrowers }: { borrowers: any[] }) {

@@ -19,14 +19,12 @@ import { formatDate, formatDateTime } from "@/lib/ui";
 import type { Loan, PageProps } from "@/types/tams";
 
 export default function Show({ loan }: { loan: Loan }) {
-    const { user } = usePage<PageProps>().props.auth;
+    const { user, canApprove: isApprover } = usePage<PageProps>().props.auth;
     const [reject, setReject] = useState(false);
     const [extend, setExtend] = useState(false);
     const rejectForm = useForm({ reason: "" });
     const extendForm = useForm({ new_due_date: "", reason: "" });
-    const canApprove =
-        ["kepala_logistik", "admin"].includes(user.role) &&
-        loan.status === "menunggu_approval";
+    const canApprove = isApprover && loan.status === "menunggu_approval";
     const canOperate = ["petugas", "admin"].includes(user.role);
     const active = ["berjalan", "terlambat", "menunggu_inspeksi"].includes(
         loan.status,

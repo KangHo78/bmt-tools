@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureActiveUser;
+use App\Http\Middleware\EnsureApprover;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureSsoGroup;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -22,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['uuid']);
 
         $middleware->alias([
+            'approver' => EnsureApprover::class,
             'role' => EnsureRole::class,
             'sso.group' => EnsureSsoGroup::class,
         ]);

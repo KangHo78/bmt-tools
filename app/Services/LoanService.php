@@ -10,6 +10,7 @@ use App\Models\PhysicalToken;
 use App\Models\SystemNotification;
 use App\Models\ToolUnit;
 use App\Models\User;
+use App\Support\ApprovalConfiguration;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,8 @@ use Illuminate\Validation\ValidationException;
 
 class LoanService
 {
+    public function __construct(private ApprovalConfiguration $approvalConfiguration) {}
+
     public function create(Borrower $borrower, array $data, ?UploadedFile $letter, User $createdBy, bool $allowTokenRegistration = false): Loan
     {
         return DB::transaction(function () use ($borrower, $data, $letter, $createdBy, $allowTokenRegistration) {
@@ -79,6 +82,20 @@ class LoanService
 
             if ($borrower->user && ! $borrower->user->is($createdBy)) {
                 $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$createdBy->name} membuat {$loan->trx_no} untuk Anda.");
+            }
+
+            if ($outside) {
+                foreach ($this->approvalConfiguration->approvers() as $approver) {
+                    SystemNotification::create([
+                        'user_id' => $approver->id,
+                        'category' => 'perlu_tindakan',
+                        'title' => "Permohonan {$loan->trx_no} menunggu persetujuan",
+                        'description' => "{$borrower->name} · {$loan->purpose}",
+                        'object_type' => 'loan',
+                        'object_id' => $loan->id,
+                        'href' => "/peminjaman/{$loan->id}",
+                    ]);
+                }
             }
 
             return $loan;

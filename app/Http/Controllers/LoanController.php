@@ -11,6 +11,7 @@ use App\Models\ToolType;
 use App\Models\User;
 use App\Services\LoanService;
 use App\Services\SsoUserSynchronizer;
+use App\Support\ApprovalConfiguration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -21,6 +22,7 @@ class LoanController extends Controller
     public function __construct(
         private LoanService $service,
         private SsoUserSynchronizer $ssoSynchronizer,
+        private ApprovalConfiguration $approvalConfiguration,
     ) {}
 
     public function index(Request $request)
@@ -183,7 +185,7 @@ class LoanController extends Controller
             $loan->update(['due_date' => $extension->new_due_date, 'status' => $loan->status === 'terlambat' ? 'berjalan' : $loan->status]);
         }
         if (! $autoApprove) {
-            foreach (User::whereIn('role', ['kepala_logistik', 'admin'])->where('is_active', true)->get() as $approver) {
+            foreach ($this->approvalConfiguration->approvers() as $approver) {
                 SystemNotification::create(['user_id' => $approver->id, 'category' => 'perlu_tindakan', 'title' => "Perpanjangan {$loan->trx_no} menunggu persetujuan", 'description' => $data['reason'], 'object_type' => 'loan_extension', 'object_id' => $extension->id, 'href' => '/approval']);
             }
         }

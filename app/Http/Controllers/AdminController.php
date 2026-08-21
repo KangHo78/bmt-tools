@@ -11,6 +11,7 @@ use App\Models\SsoItem;
 use App\Models\SystemSetting;
 use App\Models\ToolType;
 use App\Models\User;
+use App\Support\ApprovalConfiguration;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,13 +21,16 @@ use Inertia\Inertia;
 
 class AdminController extends Controller
 {
-    public function index()
+    public function index(ApprovalConfiguration $approvalConfiguration)
     {
         return Inertia::render('Operations/Admin', [
             'users' => User::orderBy('name')->get(), 'activity' => ActivityLog::with('user:id,name')->latest()->limit(30)->get(),
             'borrowers' => Borrower::with(['user:id,email', 'tokens' => fn ($query) => $query->orderBy('code')])->orderBy('name')->get(),
             'categories' => Category::orderBy('name')->get(), 'locations' => Location::withCount('units')->with('parent:id,name')->orderBy('name')->get(),
-            'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name'])->orderBy('name')->get(), 'settings' => SystemSetting::orderBy('key')->get(),
+            'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name'])->orderBy('name')->get(),
+            'settings' => SystemSetting::where('key', '!=', ApprovalConfiguration::SETTING_KEY)->orderBy('key')->get(),
+            'approvalCandidates' => $approvalConfiguration->eligibleQuery()->orderBy('name')->get(['id', 'name', 'email', 'role', 'institution']),
+            'approvalUserIds' => $approvalConfiguration->approverIds(),
             'masterItems' => SsoItem::tools()->orderBy('item_no')->get([
                 'id', 'item_no', 'item_name', 'manufacture_pn', 'original_manufacture', 'article_no', 'unit',
             ]),
@@ -264,5 +268,42 @@ class AdminController extends Controller
         } AuditLogger::record('settings.updated', SystemSetting::firstOrFail(), ['keys' => array_keys($data['settings']), 'reason' => $data['reason']]);
 
         return back()->with('success', 'Konfigurasi sistem diperbarui.');
+    }
+
+    public function updateApprovers(Request $request, ApprovalConfiguration $approvalConfiguration)
+    {
+        $data = $request->validate([
+            'user_ids' => ['required', 'array', 'min:1'],
+            'user_ids.*' => ['required', 'integer', 'distinct'],
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $selectedIds = array_values(array_map('intval', $data['user_ids']));
+        $validIds = $approvalConfiguration->eligibleQuery()
+            ->whereIn('id', $selectedIds)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (count($validIds) !== count($selectedIds)) {
+            throw ValidationException::withMessages([
+                'user_ids' => 'Approver harus merupakan Kepala Logistik atau Administrator yang aktif.',
+            ]);
+        }
+
+        $setting = SystemSetting::updateOrCreate(
+            ['key' => ApprovalConfiguration::SETTING_KEY],
+            [
+                'value' => json_encode($validIds),
+                'type' => 'json',
+                'description' => 'Daftar pengguna yang berwenang menyetujui atau menolak permohonan',
+            ],
+        );
+        AuditLogger::record('approval.approvers_updated', $setting, [
+            'user_ids' => $validIds,
+            'reason' => $data['reason'],
+        ]);
+
+        return back()->with('success', 'Daftar approver berhasil diperbarui.');
     }
 }
