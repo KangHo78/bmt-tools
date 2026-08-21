@@ -19,6 +19,17 @@ import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
 import LocationTree from "@/Components/LocationTree";
 import { formatDateTime, roleLabels } from "@/lib/ui";
 
+const RULES_PLACEHOLDER = `Contoh:
+- Hanya digunakan di area workshop
+- Wajib menggunakan APD
+- Maksimal peminjaman 7 hari
+- Bersihkan alat sebelum dikembalikan`;
+
+const CHECKLIST_PLACEHOLDER = `Kondisi fisik tidak retak atau rusak
+Kelengkapan komponen sesuai
+Baut dan pengunci berfungsi
+Alat bersih setelah digunakan`;
+
 export default function Admin(props: {
     users: any[];
     borrowers: any[];
@@ -568,22 +579,16 @@ function MasterTab({ toolTypes, masterItems, categories, locations }: any) {
                             label="Aturan peminjaman"
                             value={d.rules_summary}
                             set={(v) => setD({ ...d, rules_summary: v })}
+                            placeholder={RULES_PLACEHOLDER}
+                            hint="Tuliskan batas penggunaan, kewajiban APD, durasi, dan ketentuan pengembalian."
                         />
-                        <label>
-                            <span className="label">
-                                Checklist, satu per baris
-                            </span>
-                            <textarea
-                                className="control min-h-24"
-                                value={d.checklist_text}
-                                onChange={(e) =>
-                                    setD({
-                                        ...d,
-                                        checklist_text: e.target.value,
-                                    })
-                                }
-                            />
-                        </label>
+                        <Textarea
+                            label="Checklist, satu per baris"
+                            value={d.checklist_text}
+                            set={(v) => setD({ ...d, checklist_text: v })}
+                            placeholder={CHECKLIST_PLACEHOLDER}
+                            hint="Setiap baris otomatis menjadi satu poin pemeriksaan saat serah terima."
+                        />
                         <button
                             disabled={
                                 !d.sso_item_id ||
@@ -688,12 +693,16 @@ function EditToolType({
                     label="Aturan peminjaman"
                     value={d.rules_summary}
                     set={(v) => setD({ ...d, rules_summary: v })}
+                    placeholder={RULES_PLACEHOLDER}
+                    hint="Tuliskan batas penggunaan, kewajiban APD, durasi, dan ketentuan pengembalian."
                 />
                 <div className="sm:col-span-2">
                     <Textarea
                         label="Checklist, satu per baris"
                         value={d.checklist_text}
                         set={(v) => setD({ ...d, checklist_text: v })}
+                        placeholder={CHECKLIST_PLACEHOLDER}
+                        hint="Setiap baris otomatis menjadi satu poin pemeriksaan saat serah terima."
                     />
                 </div>
             </div>
@@ -1046,10 +1055,14 @@ function Textarea({
     label,
     value,
     set,
+    placeholder,
+    hint,
 }: {
     label: string;
     value: string;
     set: (v: string) => void;
+    placeholder?: string;
+    hint?: string;
 }) {
     return (
         <label>
@@ -1058,7 +1071,11 @@ function Textarea({
                 className="control min-h-24 resize-y"
                 value={value}
                 onChange={(e) => set(e.target.value)}
+                placeholder={placeholder}
             />
+            {hint && (
+                <small className="mt-1.5 text-xs text-muted">{hint}</small>
+            )}
         </label>
     );
 }
