@@ -2,6 +2,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import { ArrowLeft, FileText, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
 
 export default function Show({
@@ -90,7 +91,7 @@ export default function Show({
                     </h2>
                     <div className="mt-5 grid gap-4 sm:grid-cols-2">
                         <Field label="Tahap">
-                            <select
+                            <SearchableSelect
                                 className="control"
                                 value={d.stage}
                                 onChange={(e) =>
@@ -108,7 +109,7 @@ export default function Show({
                                         {x.replaceAll("_", " ")}
                                     </option>
                                 ))}
-                            </select>
+                            </SearchableSelect>
                             {errors.stage && (
                                 <span className="text-xs text-red">
                                     {errors.stage}
@@ -116,7 +117,7 @@ export default function Show({
                             )}
                         </Field>
                         <Field label="Status penyelesaian">
-                            <select
+                            <SearchableSelect
                                 className="control"
                                 value={d.resolution_status}
                                 onChange={(e) =>
@@ -138,10 +139,10 @@ export default function Show({
                                         {x.replaceAll("_", " ")}
                                     </option>
                                 ))}
-                            </select>
+                            </SearchableSelect>
                         </Field>
                         <Field label="Unit pengganti (opsional)" wide>
-                            <select
+                            <SearchableSelect
                                 className="control"
                                 value={d.replacement_unit_id}
                                 onChange={(e) =>
@@ -157,7 +158,7 @@ export default function Show({
                                         {u.asset_code} · {u.tool_type.name}
                                     </option>
                                 ))}
-                            </select>
+                            </SearchableSelect>
                         </Field>
                         <Field label="Keputusan lembaga" wide>
                             <textarea

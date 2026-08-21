@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
 import LocationTree from "@/Components/LocationTree";
 import { formatDateTime, roleLabels } from "@/lib/ui";
@@ -178,7 +179,7 @@ function BorrowersTab({ borrowers }: { borrowers: any[] }) {
                                         <span className="label">
                                             Pemilik baru
                                         </span>
-                                        <select
+                                        <SearchableSelect
                                             className="control"
                                             value={transfer.borrower_id}
                                             onChange={(event) =>
@@ -212,7 +213,7 @@ function BorrowersTab({ borrowers }: { borrowers: any[] }) {
                                                             "Tanpa unit"}
                                                     </option>
                                                 ))}
-                                        </select>
+                                        </SearchableSelect>
                                     </label>
                                     <Input
                                         label="Alasan pemindahan"
@@ -1018,7 +1019,7 @@ function Select({
     return (
         <label>
             <span className="label">{label}</span>
-            <select
+            <SearchableSelect
                 className="control"
                 value={value}
                 onChange={(e) => set(e.target.value)}
@@ -1028,7 +1029,7 @@ function Select({
                         {x.replaceAll("_", " ")}
                     </option>
                 ))}
-            </select>
+            </SearchableSelect>
         </label>
     );
 }
@@ -1048,7 +1049,7 @@ function SelectMap({
     return (
         <label>
             <span className="label">{label}</span>
-            <select
+            <SearchableSelect
                 className="control"
                 value={value}
                 onChange={(e) => set(e.target.value)}
@@ -1060,7 +1061,7 @@ function SelectMap({
                         {x.name}
                     </option>
                 ))}
-            </select>
+            </SearchableSelect>
         </label>
     );
 }

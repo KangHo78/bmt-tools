@@ -2,6 +2,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import { ArrowRight, Plus, ScanLine, X } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import {
     EmptyState,
     PageHeader,
@@ -157,7 +158,7 @@ function CreateAudit({
                         />
                     </Field>
                     <Field label="Batasi lokasi (opsional)">
-                        <select
+                        <SearchableSelect
                             className="control"
                             value={d.location_id}
                             onChange={(e) =>
@@ -170,7 +171,7 @@ function CreateAudit({
                                     {x.name}
                                 </option>
                             ))}
-                        </select>
+                        </SearchableSelect>
                     </Field>
                     <Field label="Petugas">
                         <input

@@ -2,6 +2,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import { Filter, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import {
     AssetGlyph,
     EmptyState,
@@ -56,7 +57,7 @@ export default function Index({
                             placeholder="Nama atau kode alat..."
                         />
                     </div>
-                    <select
+                    <SearchableSelect
                         className="control"
                         value={filters.category ?? ""}
                         onChange={(e) => apply(e.target.value)}
@@ -67,7 +68,7 @@ export default function Index({
                                 {c.name}
                             </option>
                         ))}
-                    </select>
+                    </SearchableSelect>
                     <button onClick={() => apply()} className="btn-secondary">
                         <Filter size={17} />
                         Terapkan

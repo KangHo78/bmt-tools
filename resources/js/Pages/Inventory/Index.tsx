@@ -2,6 +2,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import { ArrowRightLeft, PackagePlus, Printer, Search, X } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import {
     EmptyState,
     PageHeader,
@@ -211,7 +212,7 @@ function MoveModal({
                 <div className="mt-5 space-y-4">
                     <label>
                         <span className="label">Lokasi tujuan</span>
-                        <select
+                        <SearchableSelect
                             className="control"
                             value={location}
                             onChange={(e) => setLocation(e.target.value)}
@@ -222,7 +223,7 @@ function MoveModal({
                                     {x.name}
                                 </option>
                             ))}
-                        </select>
+                        </SearchableSelect>
                     </label>
                     <label>
                         <span className="label">Alasan mutasi</span>

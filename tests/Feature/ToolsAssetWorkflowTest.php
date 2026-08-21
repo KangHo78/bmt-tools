@@ -70,6 +70,7 @@ class ToolsAssetWorkflowTest extends TestCase
         $borrowerTokens = $borrower->token_used;
         $staffTokens = $staff->token_used;
         $profile = $borrower->borrower;
+        $physicalToken = $profile->tokens()->where('status', 'dipegang_peminjam')->firstOrFail();
 
         $this->actingAs($staff)
             ->get(route('loans.create'))
@@ -86,7 +87,7 @@ class ToolsAssetWorkflowTest extends TestCase
             'purpose' => 'Pekerjaan yang diinput petugas',
             'location_text' => 'Workshop Trowulan',
             'start_date' => now()->addDay()->toDateString(),
-            'token_codes' => [$type->id => '99-01'],
+            'token_codes' => [$type->id => $physicalToken->code],
         ]);
 
         $loan = Loan::latest('id')->firstOrFail();

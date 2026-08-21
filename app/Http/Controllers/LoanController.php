@@ -95,14 +95,16 @@ class LoanController extends Controller
             'new_borrower.phone' => $canChooseBorrower ? ['nullable', 'string', 'max:50'] : ['prohibited'],
         ]);
         $borrower = Borrower::query()->where('user_id', $request->user()->id)->firstOrFail();
+        $registerGuestTokens = false;
 
         if ($canChooseBorrower) {
+            $registerGuestTokens = ! filled($data['borrower_id'] ?? null);
             $borrower = filled($data['borrower_id'] ?? null)
                 ? Borrower::query()->where('is_active', true)->findOrFail($data['borrower_id'])
                 : Borrower::create([...$data['new_borrower'], 'is_active' => true]);
         }
 
-        $loan = $this->service->create($borrower, $data, $request->file('letter'), $request->user(), $canChooseBorrower);
+        $loan = $this->service->create($borrower, $data, $request->file('letter'), $request->user(), $registerGuestTokens);
 
         return to_route('loans.show', $loan)->with('success', $borrower->user?->is($request->user())
             ? 'Permohonan berhasil dibuat.'

@@ -2,6 +2,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import { ArrowLeft, CheckCircle2, ScanLine } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
 
 export default function Show({
@@ -71,7 +72,7 @@ export default function Show({
                                 />
                             </Field>
                             <Field label="Lokasi aktual">
-                                <select
+                                <SearchableSelect
                                     className="control"
                                     value={scan.location_id}
                                     onChange={(e) =>
@@ -87,10 +88,10 @@ export default function Show({
                                             {x.name}
                                         </option>
                                     ))}
-                                </select>
+                                </SearchableSelect>
                             </Field>
                             <Field label="Kondisi aktual">
-                                <select
+                                <SearchableSelect
                                     className="control"
                                     value={scan.condition}
                                     onChange={(e) =>
@@ -106,7 +107,7 @@ export default function Show({
                                     </option>
                                     <option value="rusak">Rusak</option>
                                     <option value="hilang">Hilang</option>
-                                </select>
+                                </SearchableSelect>
                             </Field>
                             <Field label="Catatan">
                                 <textarea

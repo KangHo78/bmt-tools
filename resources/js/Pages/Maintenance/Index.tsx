@@ -2,6 +2,7 @@ import { Head, router } from "@inertiajs/react";
 import { CheckCircle2, Plus, Wrench, X } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import {
     EmptyState,
     PageHeader,
@@ -142,7 +143,7 @@ function CreateOrder({ units, close }: { units: any[]; close: () => void }) {
         <Modal title="Work Order Baru" close={close}>
             <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Unit" wide>
-                    <select
+                    <SearchableSelect
                         className="control"
                         value={d.unit_id}
                         onChange={(e) =>
@@ -155,10 +156,10 @@ function CreateOrder({ units, close }: { units: any[]; close: () => void }) {
                                 {u.asset_code} · {u.tool_type.name}
                             </option>
                         ))}
-                    </select>
+                    </SearchableSelect>
                 </Field>
                 <Field label="Jenis">
-                    <select
+                    <SearchableSelect
                         className="control"
                         value={d.type}
                         onChange={(e) => setD({ ...d, type: e.target.value })}
@@ -172,7 +173,7 @@ function CreateOrder({ units, close }: { units: any[]; close: () => void }) {
                         ].map((x) => (
                             <option key={x}>{x}</option>
                         ))}
-                    </select>
+                    </SearchableSelect>
                 </Field>
                 <Field label="Jadwal">
                     <input
@@ -239,7 +240,7 @@ function UpdateOrder({ order, close }: { order: any; close: () => void }) {
         <Modal title={order.work_order_no} close={close}>
             <div className="space-y-4">
                 <Field label="Status">
-                    <select
+                    <SearchableSelect
                         className="control"
                         value={d.status}
                         onChange={(e) => setD({ ...d, status: e.target.value })}
@@ -252,7 +253,7 @@ function UpdateOrder({ order, close }: { order: any; close: () => void }) {
                         ].map((x) => (
                             <option key={x}>{x}</option>
                         ))}
-                    </select>
+                    </SearchableSelect>
                 </Field>
                 <Field label="Biaya">
                     <input

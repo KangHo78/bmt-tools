@@ -2,6 +2,7 @@ import { Head, Link, router } from "@inertiajs/react";
 import { ArrowLeft, PackagePlus, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
+import SearchableSelect from "@/Components/SearchableSelect";
 import { PageHeader, Panel } from "@/Components/TamsUI";
 
 const blank = () => ({
@@ -175,7 +176,7 @@ export default function CreateReceipt({
                                 </div>
                                 <div className="grid gap-3 sm:grid-cols-2">
                                     <Field label="Jenis alat">
-                                        <select
+                                        <SearchableSelect
                                             className="control"
                                             value={x.tool_type_id}
                                             onChange={(e) =>
@@ -194,10 +195,10 @@ export default function CreateReceipt({
                                                     {t.code} · {t.name}
                                                 </option>
                                             ))}
-                                        </select>
+                                        </SearchableSelect>
                                     </Field>
                                     <Field label="Lokasi awal">
-                                        <select
+                                        <SearchableSelect
                                             className="control"
                                             value={x.location_id}
                                             onChange={(e) =>
@@ -216,7 +217,7 @@ export default function CreateReceipt({
                                                     {l.name}
                                                 </option>
                                             ))}
-                                        </select>
+                                        </SearchableSelect>
                                     </Field>
                                     <Field label="Jumlah diminta">
                                         <input
@@ -249,7 +250,7 @@ export default function CreateReceipt({
                                         />
                                     </Field>
                                     <Field label="Kondisi awal">
-                                        <select
+                                        <SearchableSelect
                                             className="control"
                                             value={x.initial_condition}
                                             onChange={(e) =>
@@ -265,7 +266,7 @@ export default function CreateReceipt({
                                                 Perlu perhatian
                                             </option>
                                             <option value="rusak">Rusak</option>
-                                        </select>
+                                        </SearchableSelect>
                                     </Field>
                                     {x.requested_quantity !==
                                         x.received_quantity && (
