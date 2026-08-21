@@ -90,6 +90,7 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::post('/administrasi/pengguna/{user}', [AdminController::class, 'updateUser'])->name('admin.users.update');
         Route::post('/administrasi/peminjam', [AdminController::class, 'storeBorrower'])->name('admin.borrowers.store');
         Route::post('/administrasi/peminjam/{borrower}/token', [AdminController::class, 'storeToken'])->name('admin.tokens.store');
+        Route::post('/administrasi/token/{physicalToken}/pindah', [AdminController::class, 'transferToken'])->name('admin.tokens.transfer');
         Route::post('/administrasi/kategori', [AdminController::class, 'storeCategory'])->name('admin.categories.store');
         Route::put('/administrasi/kategori/{category}', [AdminController::class, 'updateCategory'])->name('admin.categories.update');
         Route::delete('/administrasi/kategori/{category}', [AdminController::class, 'destroyCategory'])->name('admin.categories.destroy');

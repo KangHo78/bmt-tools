@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Loan;
+use App\Models\PhysicalToken;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Models\User;
@@ -138,6 +139,52 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->assertSame('Tamu Workshop', $loan->borrower->name);
         $this->assertSame('TK-9001', $loan->items()->firstOrFail()->physicalToken->code);
         $this->assertSame('direservasi', $loan->items()->firstOrFail()->physicalToken->status);
+    }
+
+    public function test_admin_can_create_a_token_range_and_transfer_an_available_token(): void
+    {
+        $admin = User::where('email', 'admin@tams.id')->firstOrFail();
+        $source = User::where('email', 'user@tams.id')->firstOrFail()->borrower;
+        $target = User::where('email', 'andi@tams.id')->firstOrFail()->borrower;
+
+        $this->actingAs($admin)->post(route('admin.tokens.store', $source), [
+            'code' => '08-01-10',
+        ])->assertRedirect();
+
+        foreach (range(1, 10) as $number) {
+            $this->assertDatabaseHas('physical_tokens', [
+                'borrower_id' => $source->id,
+                'code' => sprintf('08-%02d', $number),
+            ]);
+        }
+
+        $token = PhysicalToken::where('code', '08-01')->firstOrFail();
+        $this->actingAs($admin)->post(route('admin.tokens.transfer', $token), [
+            'borrower_id' => $target->id,
+            'reason' => 'Kepingan diserahkan kepada Deny Pras',
+        ])->assertRedirect();
+
+        $this->assertSame($target->id, $token->fresh()->borrower_id);
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $admin->id,
+            'action' => 'physical_token.transferred',
+            'subject_id' => $token->id,
+        ]);
+    }
+
+    public function test_token_in_an_active_transaction_cannot_be_transferred(): void
+    {
+        $admin = User::where('email', 'admin@tams.id')->firstOrFail();
+        $token = PhysicalToken::where('status', 'direservasi')->firstOrFail();
+        $target = User::where('email', 'andi@tams.id')->firstOrFail()->borrower;
+        $owner = $token->borrower_id;
+
+        $this->actingAs($admin)->post(route('admin.tokens.transfer', $token), [
+            'borrower_id' => $target->id,
+            'reason' => 'Percobaan pemindahan',
+        ])->assertSessionHasErrors('token');
+
+        $this->assertSame($owner, $token->fresh()->borrower_id);
     }
 
     public function test_external_loan_requires_a_letter_and_head_approval(): void

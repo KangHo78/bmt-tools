@@ -14,6 +14,7 @@ use App\Support\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class AdminController extends Controller
@@ -42,11 +43,48 @@ class AdminController extends Controller
     public function storeToken(Request $request, Borrower $borrower)
     {
         $request->merge(['code' => mb_strtoupper(trim((string) $request->input('code')))]);
-        $data = $request->validate(['code' => ['required', 'string', 'max:50', Rule::unique('physical_tokens', 'code')]]);
-        $token = PhysicalToken::create(['borrower_id' => $borrower->id, 'code' => mb_strtoupper(trim($data['code'])), 'status' => 'dipegang_peminjam']);
-        AuditLogger::record('physical_token.created', $token, ['borrower_id' => $borrower->id]);
+        $data = $request->validate(['code' => ['required', 'string', 'max:100']]);
+        $codes = $this->expandTokenCodes($data['code']);
+        $duplicates = PhysicalToken::query()->whereIn('code', $codes)->pluck('code');
 
-        return back()->with('success', "Token {$token->code} terdaftar untuk {$borrower->name}.");
+        if ($duplicates->isNotEmpty()) {
+            throw ValidationException::withMessages(['code' => 'Kode sudah terdaftar: '.$duplicates->join(', ')]);
+        }
+
+        DB::transaction(function () use ($borrower, $codes) {
+            foreach ($codes as $code) {
+                $token = PhysicalToken::create(['borrower_id' => $borrower->id, 'code' => $code, 'status' => 'dipegang_peminjam']);
+                AuditLogger::record('physical_token.created', $token, ['borrower_id' => $borrower->id, 'batch_size' => count($codes)]);
+            }
+        });
+
+        return back()->with('success', count($codes).' token berhasil didaftarkan untuk '.$borrower->name.'.');
+    }
+
+    public function transferToken(Request $request, PhysicalToken $physicalToken)
+    {
+        $data = $request->validate([
+            'borrower_id' => ['required', 'integer', Rule::exists('borrowers', 'id')->where('is_active', true), Rule::notIn([$physicalToken->borrower_id])],
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ]);
+
+        DB::transaction(function () use ($physicalToken, $data) {
+            $token = PhysicalToken::query()->lockForUpdate()->findOrFail($physicalToken->id);
+            if ($token->status !== 'dipegang_peminjam') {
+                throw ValidationException::withMessages(['token' => 'Token sedang digunakan dan belum dapat dipindahkan.']);
+            }
+            if ($token->borrower_id === (int) $data['borrower_id']) {
+                throw ValidationException::withMessages(['borrower_id' => 'Pemilik baru harus berbeda dari pemilik saat ini.']);
+            }
+
+            $before = $token->borrower_id;
+            $token->update(['borrower_id' => $data['borrower_id']]);
+            AuditLogger::record('physical_token.transferred', $token, [
+                'from_borrower_id' => $before, 'to_borrower_id' => $data['borrower_id'], 'reason' => $data['reason'],
+            ]);
+        });
+
+        return back()->with('success', "Token {$physicalToken->code} berhasil dipindahkan.");
     }
 
     public function updateUser(Request $request, User $user)
@@ -140,6 +178,29 @@ class AdminController extends Controller
             'name' => ['required', 'string', 'max:255', Rule::unique('categories')->ignore($category)],
             'function' => ['nullable', 'string', 'max:255'],
         ]);
+    }
+
+    /** @return list<string> */
+    private function expandTokenCodes(string $input): array
+    {
+        $input = mb_strtoupper(trim($input));
+        if (! preg_match('/^(.*?)(\d+)-(\d+)$/', $input, $matches)) {
+            return [$input];
+        }
+
+        [$all, $prefix, $startText, $endText] = $matches;
+        $start = (int) $startText;
+        $end = (int) $endText;
+        if ($end < $start) {
+            throw ValidationException::withMessages(['code' => 'Nomor akhir rentang harus sama atau lebih besar dari nomor awal.']);
+        }
+        if (($end - $start + 1) > 200) {
+            throw ValidationException::withMessages(['code' => 'Maksimal 200 token dalam satu kali input.']);
+        }
+
+        $width = max(strlen($startText), strlen($endText));
+
+        return array_map(fn (int $number) => $prefix.str_pad((string) $number, $width, '0', STR_PAD_LEFT), range($start, $end));
     }
 
     private function toolTypeData(Request $request, ?ToolType $toolType = null): array

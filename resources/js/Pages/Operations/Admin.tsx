@@ -1,5 +1,6 @@
 import { Head, router } from "@inertiajs/react";
 import {
+    ArrowRight,
     Boxes,
     KeyRound,
     MapPinned,
@@ -57,7 +58,9 @@ export default function Admin(props: {
                 ))}
             </div>
             {tab === "users" && <UsersTab users={props.users} />}{" "}
-            {tab === "borrowers" && <BorrowersTab borrowers={props.borrowers} />}{" "}
+            {tab === "borrowers" && (
+                <BorrowersTab borrowers={props.borrowers} />
+            )}{" "}
             {tab === "master" && <MasterTab {...props} />}{" "}
             {tab === "categories" && (
                 <CategoriesTab categories={props.categories} />
@@ -71,17 +74,281 @@ export default function Admin(props: {
     );
 }
 function BorrowersTab({ borrowers }: { borrowers: any[] }) {
-    const [selected, setSelected] = useState<any>(borrowers[0] ?? null);
+    const [selectedId, setSelectedId] = useState<number | null>(
+        borrowers[0]?.id ?? null,
+    );
+    const [selectedTokenId, setSelectedTokenId] = useState<number | null>(null);
     const [code, setCode] = useState("");
-    const [guest, setGuest] = useState({ name: "", identifier: "", institution: "", phone: "" });
-    return <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <Panel className="overflow-hidden"><div className="border-b p-5"><h2 className="font-display text-2xl font-bold">Peminjam & Kepingan Token</h2><p className="mt-1 text-sm text-muted">Profil dapat terhubung ke akun SSO atau berdiri sendiri untuk peminjam yang datang langsung.</p></div>
-            <div className="divide-y">{borrowers.map(b=><button key={b.id} onClick={()=>setSelected(b)} className={`grid w-full gap-3 p-4 text-left sm:grid-cols-[1fr_auto] ${selected?.id===b.id?"bg-amber/10":"hover:bg-canvas"}`}><div><strong>{b.name}</strong><small>{b.institution||b.identifier||"Identitas belum dicatat"} · {b.user?"Terhubung SSO":"Tanpa akun"}</small></div><div className="flex flex-wrap justify-end gap-1">{b.tokens.length?b.tokens.map((t:any)=><span key={t.id} className={`rounded px-2 py-1 font-num text-[10px] font-bold ${t.status==="dipegang_peminjam"?"bg-green/10 text-green":"bg-amber/15 text-ink"}`}>{t.code} · {t.status.replaceAll("_"," ")}</span>):<span className="text-xs text-muted">Belum ada token</span>}</div></button>)}</div>
-        </Panel>
-        <div className="space-y-5"><Panel className="p-5"><div className="flex items-center gap-2"><KeyRound size={19}/><h3 className="font-display text-xl font-bold">Daftarkan Kepingan</h3></div><p className="mt-2 text-sm text-muted">Token untuk <strong>{selected?.name||"pilih peminjam"}</strong>.</p><div className="mt-4"><Input label="Kode unik token" value={code} set={setCode}/></div><button disabled={!selected||!code} onClick={()=>router.post(`/administrasi/peminjam/${selected.id}/token`,{code},{onSuccess:()=>setCode("")})} className="btn-primary mt-4 w-full"><Plus size={16}/>Tambah Token</button></Panel>
-            <Panel className="p-5"><div className="flex items-center gap-2"><UserPlus size={19}/><h3 className="font-display text-xl font-bold">Peminjam Tanpa Akun</h3></div><div className="mt-4 space-y-3"><Input label="Nama lengkap" value={guest.name} set={v=>setGuest({...guest,name:v})}/><Input label="NIK / NRP / identitas" value={guest.identifier} set={v=>setGuest({...guest,identifier:v})}/><Input label="Unit / perusahaan" value={guest.institution} set={v=>setGuest({...guest,institution:v})}/><Input label="Nomor telepon" value={guest.phone} set={v=>setGuest({...guest,phone:v})}/></div><button disabled={!guest.name} onClick={()=>router.post('/administrasi/peminjam',guest,{onSuccess:()=>setGuest({name:"",identifier:"",institution:"",phone:""})})} className="btn-primary mt-4 w-full"><UserPlus size={16}/>Tambah Peminjam</button></Panel>
+    const [transfer, setTransfer] = useState({ borrower_id: "", reason: "" });
+    const [guest, setGuest] = useState({
+        name: "",
+        identifier: "",
+        institution: "",
+        phone: "",
+    });
+    const selected =
+        borrowers.find((borrower) => borrower.id === selectedId) ??
+        borrowers[0];
+    const selectedToken = borrowers
+        .flatMap((borrower) =>
+            borrower.tokens.map((token: any) => ({
+                ...token,
+                owner: borrower,
+            })),
+        )
+        .find((token) => token.id === selectedTokenId);
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <Panel className="overflow-hidden">
+                <div className="border-b p-5">
+                    <h2 className="font-display text-2xl font-bold">
+                        Peminjam & Kepingan Token
+                    </h2>
+                    <p className="mt-1 text-sm text-muted">
+                        Profil dapat terhubung ke akun SSO atau berdiri sendiri
+                        untuk peminjam yang datang langsung.
+                    </p>
+                </div>
+                <div className="divide-y">
+                    {borrowers.map((b) => (
+                        <button
+                            key={b.id}
+                            onClick={() => setSelectedId(b.id)}
+                            className={`grid w-full gap-3 p-4 text-left sm:grid-cols-[1fr_auto] ${selected?.id === b.id ? "bg-amber/10" : "hover:bg-canvas"}`}
+                        >
+                            <div>
+                                <strong>{b.name}</strong>
+                                <small>
+                                    {b.institution ||
+                                        b.identifier ||
+                                        "Identitas belum dicatat"}{" "}
+                                    · {b.user ? "Terhubung SSO" : "Tanpa akun"}
+                                </small>
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-1">
+                                {b.tokens.length ? (
+                                    b.tokens.map((t: any) => (
+                                        <span
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                setSelectedId(b.id);
+                                                setSelectedTokenId(t.id);
+                                                setTransfer({
+                                                    borrower_id: "",
+                                                    reason: "",
+                                                });
+                                            }}
+                                            key={t.id}
+                                            className={`rounded border px-2 py-1 font-num text-[10px] font-bold ${selectedTokenId === t.id ? "border-ink bg-ink text-white" : t.status === "dipegang_peminjam" ? "border-green/20 bg-green/10 text-green" : "border-amber/30 bg-amber/15 text-ink"}`}
+                                        >
+                                            {t.code} ·{" "}
+                                            {t.status.replaceAll("_", " ")}
+                                        </span>
+                                    ))
+                                ) : (
+                                    <span className="text-xs text-muted">
+                                        Belum ada token
+                                    </span>
+                                )}
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </Panel>
+            <div className="space-y-5">
+                {selectedToken && (
+                    <Panel className="overflow-hidden border-l-4 !border-l-amber">
+                        <div className="bg-ink p-5 text-white">
+                            <p className="font-num text-xs text-amber">
+                                PINDAH KEPEMILIKAN
+                            </p>
+                            <h3 className="mt-1 font-display text-3xl font-bold">
+                                {selectedToken.code}
+                            </h3>
+                            <p className="mt-1 text-xs text-white/60">
+                                Pemilik sekarang: {selectedToken.owner.name}
+                            </p>
+                        </div>
+                        <div className="space-y-3 p-5">
+                            {selectedToken.status === "dipegang_peminjam" ? (
+                                <>
+                                    <label>
+                                        <span className="label">
+                                            Pemilik baru
+                                        </span>
+                                        <select
+                                            className="control"
+                                            value={transfer.borrower_id}
+                                            onChange={(event) =>
+                                                setTransfer({
+                                                    ...transfer,
+                                                    borrower_id:
+                                                        event.target.value,
+                                                })
+                                            }
+                                        >
+                                            <option value="">
+                                                Pilih peminjam
+                                            </option>
+                                            {borrowers
+                                                .filter(
+                                                    (borrower) =>
+                                                        borrower.id !==
+                                                            selectedToken.owner
+                                                                .id &&
+                                                        borrower.is_active !==
+                                                            false,
+                                                )
+                                                .map((borrower) => (
+                                                    <option
+                                                        key={borrower.id}
+                                                        value={borrower.id}
+                                                    >
+                                                        {borrower.name} ·{" "}
+                                                        {borrower.institution ||
+                                                            borrower.identifier ||
+                                                            "Tanpa unit"}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    </label>
+                                    <Input
+                                        label="Alasan pemindahan"
+                                        value={transfer.reason}
+                                        set={(value) =>
+                                            setTransfer({
+                                                ...transfer,
+                                                reason: value,
+                                            })
+                                        }
+                                    />
+                                    <button
+                                        disabled={
+                                            !transfer.borrower_id ||
+                                            transfer.reason.length < 3
+                                        }
+                                        onClick={() =>
+                                            router.post(
+                                                `/administrasi/token/${selectedToken.id}/pindah`,
+                                                transfer,
+                                                {
+                                                    onSuccess: () => {
+                                                        setSelectedTokenId(
+                                                            null,
+                                                        );
+                                                        setTransfer({
+                                                            borrower_id: "",
+                                                            reason: "",
+                                                        });
+                                                    },
+                                                },
+                                            )
+                                        }
+                                        className="btn-primary mt-2 w-full"
+                                    >
+                                        Pindahkan Token
+                                        <ArrowRight size={16} />
+                                    </button>
+                                </>
+                            ) : (
+                                <p className="rounded border border-amber/30 bg-amber/10 p-3 text-sm">
+                                    Token sedang digunakan. Selesaikan atau
+                                    batalkan transaksi terlebih dahulu sebelum
+                                    memindahkan kepemilikan.
+                                </p>
+                            )}
+                        </div>
+                    </Panel>
+                )}
+                <Panel className="p-5">
+                    <div className="flex items-center gap-2">
+                        <KeyRound size={19} />
+                        <h3 className="font-display text-xl font-bold">
+                            Daftarkan Kepingan
+                        </h3>
+                    </div>
+                    <p className="mt-2 text-sm text-muted">
+                        Token untuk{" "}
+                        <strong>{selected?.name || "pilih peminjam"}</strong>.
+                    </p>
+                    <div className="mt-4">
+                        <Input
+                            label="Satu kode atau rentang"
+                            value={code}
+                            set={(value) => setCode(value.toUpperCase())}
+                        />
+                    </div>
+                    <p className="mt-2 rounded border border-dashed border-line bg-canvas p-2 font-num text-[11px] text-muted">
+                        <strong>08-01-10</strong> → membuat 08-01 sampai 08-10
+                    </p>
+                    <button
+                        disabled={!selected || !code}
+                        onClick={() =>
+                            router.post(
+                                `/administrasi/peminjam/${selected.id}/token`,
+                                { code },
+                                { onSuccess: () => setCode("") },
+                            )
+                        }
+                        className="btn-primary mt-4 w-full"
+                    >
+                        <Plus size={16} />
+                        Tambah Token
+                    </button>
+                </Panel>
+                <Panel className="p-5">
+                    <div className="flex items-center gap-2">
+                        <UserPlus size={19} />
+                        <h3 className="font-display text-xl font-bold">
+                            Peminjam Tanpa Akun
+                        </h3>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                        <Input
+                            label="Nama lengkap"
+                            value={guest.name}
+                            set={(v) => setGuest({ ...guest, name: v })}
+                        />
+                        <Input
+                            label="NIK / NRP / identitas"
+                            value={guest.identifier}
+                            set={(v) => setGuest({ ...guest, identifier: v })}
+                        />
+                        <Input
+                            label="Unit / perusahaan"
+                            value={guest.institution}
+                            set={(v) => setGuest({ ...guest, institution: v })}
+                        />
+                        <Input
+                            label="Nomor telepon"
+                            value={guest.phone}
+                            set={(v) => setGuest({ ...guest, phone: v })}
+                        />
+                    </div>
+                    <button
+                        disabled={!guest.name}
+                        onClick={() =>
+                            router.post("/administrasi/peminjam", guest, {
+                                onSuccess: () =>
+                                    setGuest({
+                                        name: "",
+                                        identifier: "",
+                                        institution: "",
+                                        phone: "",
+                                    }),
+                            })
+                        }
+                        className="btn-primary mt-4 w-full"
+                    >
+                        <UserPlus size={16} />
+                        Tambah Peminjam
+                    </button>
+                </Panel>
+            </div>
         </div>
-    </div>;
+    );
 }
 function UsersTab({ users }: { users: any[] }) {
     const [edit, setEdit] = useState<any>(null);
@@ -92,7 +359,8 @@ function UsersTab({ users }: { users: any[] }) {
                     Akun & Hak Akses
                 </h2>
                 <p className="mt-1 text-sm text-muted">
-                    Pengguna dan hak akses disinkronkan dari grup Tools Management pada aplikasi utama.
+                    Pengguna dan hak akses disinkronkan dari grup Tools
+                    Management pada aplikasi utama.
                 </p>
             </div>
             <div className="overflow-x-auto">
@@ -149,7 +417,8 @@ function EditUser({ user, close }: { user: any; close: () => void }) {
         <Modal title={`Akses ${user.name}`} close={close}>
             <div className="space-y-3">
                 <p className="rounded-md border border-line bg-canvas p-3 text-sm">
-                    Hak akses: <strong>{roleLabels[user.role]}</strong>. Ubah melalui grup pengguna di aplikasi utama.
+                    Hak akses: <strong>{roleLabels[user.role]}</strong>. Ubah
+                    melalui grup pengguna di aplikasi utama.
                 </p>
                 <Input
                     label="Lembaga"
@@ -469,10 +738,7 @@ function CategoriesTab({ categories }: { categories: any[] }) {
                 </div>
             </Panel>
             {edit && (
-                <EditCategory
-                    category={edit}
-                    close={() => setEdit(null)}
-                />
+                <EditCategory category={edit} close={() => setEdit(null)} />
             )}
             {deleting && (
                 <ConfirmDelete
@@ -480,10 +746,9 @@ function CategoriesTab({ categories }: { categories: any[] }) {
                     description={`${deleting.name} akan dihapus. Kategori yang masih digunakan master aset akan tetap dilindungi.`}
                     close={() => setDeleting(null)}
                     confirm={() =>
-                        router.delete(
-                            `/administrasi/kategori/${deleting.id}`,
-                            { onSuccess: () => setDeleting(null) },
-                        )
+                        router.delete(`/administrasi/kategori/${deleting.id}`, {
+                            onSuccess: () => setDeleting(null),
+                        })
                     }
                 />
             )}
@@ -537,7 +802,8 @@ function LocationsTab({ locations }: { locations: any[] }) {
                         Struktur Lokasi
                     </h2>
                     <p className="mt-1 text-sm text-muted">
-                        Area induk ditampilkan bersama seluruh ruang, rak, dan slot di bawahnya.
+                        Area induk ditampilkan bersama seluruh ruang, rak, dan
+                        slot di bawahnya.
                     </p>
                 </div>
                 <LocationTree locations={locations} />
@@ -592,7 +858,10 @@ function SettingsTab({ settings }: { settings: any[] }) {
                 Parameter Operasional
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-muted">
-                Parameter ini mengatur batas dan perilaku proses aplikasi. Alasan perubahan disimpan di Audit Trail agar perubahan konfigurasi dapat ditelusuri; isinya tidak mengubah perhitungan sistem.
+                Parameter ini mengatur batas dan perilaku proses aplikasi.
+                Alasan perubahan disimpan di Audit Trail agar perubahan
+                konfigurasi dapat ditelusuri; isinya tidak mengubah perhitungan
+                sistem.
             </p>
             <div className="mt-5 space-y-4">
                 {Object.keys(d).map((key) => (
