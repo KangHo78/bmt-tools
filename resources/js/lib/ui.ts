@@ -8,6 +8,7 @@ import {
     Wrench,
     XCircle,
 } from "lucide-react";
+import { getStoredLocale } from "@/lib/i18n";
 
 export const roleLabels: Record<string, string> = {
     user: "Peminjam",
@@ -75,19 +76,25 @@ export const toneClass: Record<string, string> = {
 };
 export const formatDate = (value?: string) =>
     value
-        ? new Intl.DateTimeFormat("id-ID", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-          }).format(new Date(value))
+        ? new Intl.DateTimeFormat(
+              getStoredLocale() === "en" ? "en-GB" : "id-ID",
+              {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+              },
+          ).format(new Date(value))
         : "—";
 export const formatDateTime = (value?: string) =>
     value
-        ? new Intl.DateTimeFormat("id-ID", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-          }).format(new Date(value))
+        ? new Intl.DateTimeFormat(
+              getStoredLocale() === "en" ? "en-GB" : "id-ID",
+              {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+              },
+          ).format(new Date(value))
         : "—";

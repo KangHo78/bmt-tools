@@ -93,6 +93,9 @@ class ToolsAssetWorkflowTest extends TestCase
         $loan = Loan::latest('id')->firstOrFail();
         $response->assertRedirect(route('loans.show', $loan));
         $this->assertSame($borrower->id, $loan->user_id);
+        $this->assertSame('disetujui', $loan->status);
+        $this->assertSame($staff->id, $loan->approved_by_id);
+        $this->assertNotNull($loan->approved_at);
         $this->assertSame($borrowerTokens + 1, $borrower->fresh()->token_used);
         $this->assertSame($staffTokens, $staff->fresh()->token_used);
         $this->assertDatabaseHas('notifications', [

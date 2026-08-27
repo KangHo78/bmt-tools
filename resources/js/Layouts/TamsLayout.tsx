@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import type { PageProps, Role } from "@/types/tams";
 import { roleLabels } from "@/lib/ui";
+import { useLocale } from "@/lib/i18n";
 
 const nav = [
     [
@@ -59,6 +60,7 @@ export default function TamsLayout({ children }: PropsWithChildren) {
     const [menu, setMenu] = useState(false);
     const [search, setSearch] = useState(false);
     const [scan, setScan] = useState(false);
+    const { locale, setLocale } = useLocale();
     const items = useMemo(
         () =>
             nav.filter(
@@ -165,6 +167,36 @@ export default function TamsLayout({ children }: PropsWithChildren) {
                         <ScanLine size={18} />
                         <span className="hidden sm:inline">Scan</span>
                     </button>
+                    <div
+                        className="flex h-10 shrink-0 items-center rounded-md border border-line bg-canvas p-1"
+                        role="group"
+                        aria-label={
+                            locale === "id"
+                                ? "Pilihan bahasa"
+                                : "Language selection"
+                        }
+                    >
+                        {(["id", "en"] as const).map((option) => (
+                            <button
+                                key={option}
+                                type="button"
+                                onClick={() => setLocale(option)}
+                                aria-pressed={locale === option}
+                                title={
+                                    option === "id"
+                                        ? "Bahasa Indonesia"
+                                        : "English"
+                                }
+                                className={`grid h-8 min-w-9 place-items-center rounded px-2 font-num text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                                    locale === option
+                                        ? "bg-ink text-white shadow-sm"
+                                        : "text-muted hover:bg-surface hover:text-ink"
+                                }`}
+                            >
+                                {option}
+                            </button>
+                        ))}
+                    </div>
                     <Link
                         href="/notifikasi"
                         className="relative grid size-10 place-items-center rounded-md border border-line bg-surface"

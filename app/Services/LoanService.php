@@ -40,6 +40,7 @@ class LoanService
             }
 
             $outside = $data['usage_type'] === 'luar_area';
+            $operatorApproved = ! $outside && $createdBy->hasRole('petugas', 'admin');
             $due = $outside ? Carbon::parse($data['due_date'])->endOfDay() : $this->nearestFriday(Carbon::parse($data['start_date']));
             $loan = Loan::create([
                 'trx_no' => $this->nextNumber(),
@@ -52,6 +53,8 @@ class LoanService
                 'start_date' => Carbon::parse($data['start_date']),
                 'due_date' => $due,
                 'status' => $outside ? 'menunggu_approval' : 'disetujui',
+                'approved_by_id' => $operatorApproved ? $createdBy->id : null,
+                'approved_at' => $operatorApproved ? now() : null,
                 'letter_url' => $letter?->store('loan-letters', 'public'),
                 'tokens_used' => $needed,
             ]);
