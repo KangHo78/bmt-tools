@@ -18,7 +18,7 @@ const copy: Copy[] = [
     ["Ringkasan", "Ringkasan", "Overview"],
     ["Dashboard", "Ringkasan", "Overview"],
     ["Katalog Alat", "Katalog Alat", "Tool Catalog"],
-    ["Peminjaman", "Peminjaman", "Loans"],
+    ["Peminjaman", "Peminjaman", "Lending"],
     ["Pengembalian", "Pengembalian", "Returns"],
     ["Inventaris", "Inventaris", "Inventory"],
     ["Lokasi", "Lokasi", "Locations"],
@@ -628,6 +628,84 @@ const copy: Copy[] = [
     ],
     ["Belum ada token", "Belum ada token", "No tokens yet"],
     ["Master Aset", "Data Induk Aset", "Asset Master Data"],
+    ["Master Checklist", "Master Daftar Periksa", "Checklist Library"],
+    ["Inspection standards", "Standar pemeriksaan", "Inspection Standards"],
+    [
+        "Kelola satu pustaka pemeriksaan yang dapat dipakai ulang oleh berbagai jenis aset.",
+        "Kelola satu pustaka pemeriksaan yang dapat dipakai ulang oleh berbagai jenis aset.",
+        "Maintain a reusable library of inspection points for every asset type.",
+    ],
+    ["Checklist pemeriksaan", "Daftar pemeriksaan", "Inspection Checklist"],
+    [
+        "Pilih poin yang wajib diperiksa untuk jenis aset ini.",
+        "Pilih poin yang wajib diperiksa untuk jenis aset ini.",
+        "Select the checks required for this asset type.",
+    ],
+    [
+        "Belum ada master checklist. Tambahkan melalui tab Master Checklist.",
+        "Belum ada master daftar periksa. Tambahkan melalui tab Master Daftar Periksa.",
+        "The checklist library is empty. Add inspection points from the Checklist Library tab.",
+    ],
+    [
+        "Pilih minimal satu poin checklist.",
+        "Pilih minimal satu poin pemeriksaan.",
+        "Select at least one inspection point.",
+    ],
+    ["Poin pemeriksaan baru", "Poin pemeriksaan baru", "New Inspection Point"],
+    ["Tambah Checklist", "Tambah Daftar Periksa", "Add Inspection Point"],
+    [
+        "Tulis satu pemeriksaan yang jelas dan dapat dijawab ya atau tidak.",
+        "Tulis satu pemeriksaan yang jelas dan dapat dijawab ya atau tidak.",
+        "Write one clear check that can be answered with yes or no.",
+    ],
+    ["Poin checklist", "Poin pemeriksaan", "Inspection Point"],
+    [
+        "Contoh: Kabel daya tidak terkelupas",
+        "Contoh: Kabel daya tidak terkelupas",
+        "Example: Power cable insulation is intact",
+    ],
+    ["Tambah Poin", "Tambah Poin", "Add Point"],
+    ["Ubah Poin Checklist", "Ubah Poin Pemeriksaan", "Edit Inspection Point"],
+    [
+        "Belum ada poin checklist.",
+        "Belum ada poin pemeriksaan.",
+        "No inspection points yet.",
+    ],
+    [
+        "Hapus poin checklist",
+        "Hapus poin pemeriksaan",
+        "Delete inspection point",
+    ],
+    [
+        "Lepaskan dari semua master aset sebelum menghapus",
+        "Lepaskan dari semua master aset sebelum menghapus",
+        "Remove this point from every asset type before deleting it",
+    ],
+    [
+        "Hapus poin checklist?",
+        "Hapus poin pemeriksaan?",
+        "Delete Inspection Point?",
+    ],
+    [
+        "Poin checklist ditambahkan.",
+        "Poin pemeriksaan ditambahkan.",
+        "Inspection point added.",
+    ],
+    [
+        "Poin checklist diperbarui.",
+        "Poin pemeriksaan diperbarui.",
+        "Inspection point updated.",
+    ],
+    [
+        "Poin checklist dihapus.",
+        "Poin pemeriksaan dihapus.",
+        "Inspection point deleted.",
+    ],
+    [
+        "Poin checklist masih digunakan oleh master aset dan tidak dapat dihapus.",
+        "Poin pemeriksaan masih digunakan oleh master aset dan tidak dapat dihapus.",
+        "This inspection point is still assigned to an asset type and cannot be deleted.",
+    ],
     ["Kategori Aset", "Kategori Aset", "Asset Categories"],
     ["Kategori Baru", "Kategori Baru", "New Category"],
     [
@@ -970,6 +1048,17 @@ function translatePart(value: string, locale: Locale): string {
                 locale === "id"
                     ? `${m[1]} selisih ditemukan.`
                     : `${m[1]} discrepancies found.`,
+        ],
+        [
+            /^(\d+) DIPILIH$/,
+            (m) => (locale === "id" ? `${m[1]} DIPILIH` : `${m[1]} SELECTED`),
+        ],
+        [
+            /^Dipakai oleh (\d+) master aset$/,
+            (m) =>
+                locale === "id"
+                    ? `Dipakai oleh ${m[1]} master aset`
+                    : `Used by ${m[1]} asset types`,
         ],
     ];
     for (const [pattern, format] of patterns) {

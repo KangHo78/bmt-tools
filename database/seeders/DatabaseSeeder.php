@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\AssetCase;
 use App\Models\Borrower;
 use App\Models\Category;
+use App\Models\ChecklistItem;
 use App\Models\Loan;
 use App\Models\Location;
 use App\Models\MaintenanceOrder;
@@ -66,6 +67,8 @@ class DatabaseSeeder extends Seeder
         $units = [];
         foreach ($definitions as [$code, $name, $category, $location, $size, $checklist]) {
             $type = ToolType::create(['code' => $code, 'name' => $name, 'category_id' => $category->id, 'primary_location_id' => $location->id, 'size' => $size, 'description' => "$name untuk kebutuhan operasional Workshop Trowulan.", 'rules_summary' => 'Periksa kondisi dan kelengkapan sebelum serta sesudah penggunaan.', 'checklist' => $checklist]);
+            $checklistIds = collect($checklist)->map(fn (string $item) => ChecklistItem::firstOrCreate(['name' => $item])->id);
+            $type->checklistItems()->sync($checklistIds->mapWithKeys(fn (int $id, int $position) => [$id => ['position' => $position]]));
             $types[$code] = $type;
             for ($i = 1; $i <= 6; $i++) {
                 $units[$code][$i] = ToolUnit::create(['tool_type_id' => $type->id, 'asset_code' => sprintf('%s-2026-%04d', $code, $i), 'serial_number' => sprintf('SN-%s-%03d', substr($code, 4), $i), 'status' => 'tersedia', 'condition' => 'baik', 'location_id' => $location->id, 'owner' => 'TAMS Pusat', 'received_at' => now()->subMonths(6)]);

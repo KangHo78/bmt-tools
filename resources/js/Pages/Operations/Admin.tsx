@@ -2,7 +2,9 @@ import { Head, router, useForm } from "@inertiajs/react";
 import {
     ArrowRight,
     Boxes,
+    Check,
     KeyRound,
+    ListChecks,
     MapPinned,
     Pencil,
     Plus,
@@ -26,11 +28,6 @@ const RULES_PLACEHOLDER = `Contoh:
 - Maksimal peminjaman 7 hari
 - Bersihkan alat sebelum dikembalikan`;
 
-const CHECKLIST_PLACEHOLDER = `Kondisi fisik tidak retak atau rusak
-Kelengkapan komponen sesuai
-Baut dan pengunci berfungsi
-Alat bersih setelah digunakan`;
-
 export default function Admin(props: {
     users: any[];
     borrowers: any[];
@@ -38,6 +35,7 @@ export default function Admin(props: {
     categories: any[];
     locations: any[];
     toolTypes: any[];
+    checklistItems: any[];
     masterItems: any[];
     settings: any[];
     approvalCandidates: any[];
@@ -48,6 +46,7 @@ export default function Admin(props: {
         ["users", "Pengguna", Users],
         ["borrowers", "Peminjam & Token", KeyRound],
         ["master", "Master Aset", Boxes],
+        ["checklists", "Master Checklist", ListChecks],
         ["categories", "Kategori", Tags],
         ["locations", "Lokasi", MapPinned],
         ["approvers", "Approval", ShieldCheck],
@@ -79,6 +78,9 @@ export default function Admin(props: {
                 <BorrowersTab borrowers={props.borrowers} />
             )}{" "}
             {tab === "master" && <MasterTab {...props} />}{" "}
+            {tab === "checklists" && (
+                <ChecklistTab checklistItems={props.checklistItems} />
+            )}{" "}
             {tab === "categories" && (
                 <CategoriesTab categories={props.categories} />
             )}{" "}
@@ -152,9 +154,12 @@ function ApproversTab({
                                     {selected && <ShieldCheck size={14} />}
                                 </span>
                                 <span>
-                                    <strong className="block">{user.name}</strong>
+                                    <strong className="block">
+                                        {user.name}
+                                    </strong>
                                     <small className="mt-1 block text-muted">
-                                        {user.email} · {user.institution || "Tanpa unit kerja"}
+                                        {user.email} ·{" "}
+                                        {user.institution || "Tanpa unit kerja"}
                                     </small>
                                 </span>
                                 <StatusBadge status={user.role} />
@@ -590,7 +595,13 @@ function EditUser({ user, close }: { user: any; close: () => void }) {
         </Modal>
     );
 }
-function MasterTab({ toolTypes, masterItems, categories, locations }: any) {
+function MasterTab({
+    toolTypes,
+    masterItems,
+    categories,
+    locations,
+    checklistItems,
+}: any) {
     const [edit, setEdit] = useState<any>(null);
     const [deleting, setDeleting] = useState<any>(null);
     const [d, setD] = useState({
@@ -598,7 +609,7 @@ function MasterTab({ toolTypes, masterItems, categories, locations }: any) {
         category_id: "",
         primary_location_id: "",
         rules_summary: "",
-        checklist_text: "",
+        checklist_item_ids: [] as number[],
     });
     const selectedItem = masterItems.find(
         (item: any) => String(item.id) === String(d.sso_item_id),
@@ -705,19 +716,19 @@ function MasterTab({ toolTypes, masterItems, categories, locations }: any) {
                             placeholder={RULES_PLACEHOLDER}
                             hint="Tuliskan batas penggunaan, kewajiban APD, durasi, dan ketentuan pengembalian."
                         />
-                        <Textarea
-                            label="Checklist, satu per baris"
-                            value={d.checklist_text}
-                            set={(v) => setD({ ...d, checklist_text: v })}
-                            placeholder={CHECKLIST_PLACEHOLDER}
-                            hint="Setiap baris otomatis menjadi satu poin pemeriksaan saat serah terima."
+                        <ChecklistPicker
+                            items={checklistItems}
+                            selected={d.checklist_item_ids}
+                            onChange={(ids) =>
+                                setD({ ...d, checklist_item_ids: ids })
+                            }
                         />
                         <button
                             disabled={
                                 !d.sso_item_id ||
                                 !d.category_id ||
                                 !d.primary_location_id ||
-                                !d.checklist_text
+                                !d.checklist_item_ids.length
                             }
                             onClick={() =>
                                 router.post("/administrasi/jenis-alat", d)
@@ -735,6 +746,7 @@ function MasterTab({ toolTypes, masterItems, categories, locations }: any) {
                     masterItems={masterItems}
                     categories={categories}
                     locations={locations}
+                    checklistItems={checklistItems}
                     close={() => setEdit(null)}
                 />
             )}
@@ -759,6 +771,7 @@ function EditToolType({
     masterItems,
     categories,
     locations,
+    checklistItems,
     close,
 }: any) {
     const matchedSource = masterItems.find(
@@ -770,7 +783,12 @@ function EditToolType({
         category_id: String(tool.category_id ?? ""),
         primary_location_id: String(tool.primary_location_id ?? ""),
         rules_summary: tool.rules_summary ?? "",
-        checklist_text: (tool.checklist ?? []).join("\n"),
+        checklist_item_ids: (
+            tool.checklist_items ??
+            checklistItems.filter((item: any) =>
+                (tool.checklist ?? []).includes(item.name),
+            )
+        ).map((item: any) => item.id) as number[],
     });
     const selectedItem = masterItems.find(
         (item: any) => String(item.id) === String(d.sso_item_id),
@@ -820,12 +838,12 @@ function EditToolType({
                     hint="Tuliskan batas penggunaan, kewajiban APD, durasi, dan ketentuan pengembalian."
                 />
                 <div className="sm:col-span-2">
-                    <Textarea
-                        label="Checklist, satu per baris"
-                        value={d.checklist_text}
-                        set={(v) => setD({ ...d, checklist_text: v })}
-                        placeholder={CHECKLIST_PLACEHOLDER}
-                        hint="Setiap baris otomatis menjadi satu poin pemeriksaan saat serah terima."
+                    <ChecklistPicker
+                        items={checklistItems}
+                        selected={d.checklist_item_ids}
+                        onChange={(ids) =>
+                            setD({ ...d, checklist_item_ids: ids })
+                        }
                     />
                 </div>
             </div>
@@ -842,6 +860,223 @@ function EditToolType({
         </Modal>
     );
 }
+
+function ChecklistPicker({
+    items,
+    selected,
+    onChange,
+}: {
+    items: any[];
+    selected: number[];
+    onChange: (ids: number[]) => void;
+}) {
+    const toggle = (id: number) =>
+        onChange(
+            selected.includes(id)
+                ? selected.filter((selectedId) => selectedId !== id)
+                : [...selected, id],
+        );
+
+    return (
+        <fieldset>
+            <div className="mb-2 flex items-end justify-between gap-3">
+                <div>
+                    <legend className="label">Checklist pemeriksaan</legend>
+                    <p className="mt-1 text-xs text-muted">
+                        Pilih poin yang wajib diperiksa untuk jenis aset ini.
+                    </p>
+                </div>
+                <span className="shrink-0 rounded bg-ink px-2 py-1 font-num text-[10px] font-bold text-white">
+                    {selected.length} DIPILIH
+                </span>
+            </div>
+            <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-line bg-canvas p-2">
+                {items.map((item) => {
+                    const checked = selected.includes(item.id);
+                    return (
+                        <label
+                            key={item.id}
+                            className={`flex cursor-pointer items-start gap-3 rounded border p-3 transition-colors ${
+                                checked
+                                    ? "border-green/40 bg-green/10"
+                                    : "border-transparent bg-surface hover:border-line"
+                            }`}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggle(item.id)}
+                                className="sr-only"
+                            />
+                            <span
+                                className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded border ${
+                                    checked
+                                        ? "border-green bg-green text-white"
+                                        : "border-line bg-white"
+                                }`}
+                                aria-hidden="true"
+                            >
+                                {checked && <Check size={13} strokeWidth={3} />}
+                            </span>
+                            <span className="text-sm font-semibold leading-snug">
+                                {item.name}
+                            </span>
+                        </label>
+                    );
+                })}
+                {!items.length && (
+                    <div className="p-5 text-center text-sm text-muted">
+                        Belum ada master checklist. Tambahkan melalui tab Master
+                        Checklist.
+                    </div>
+                )}
+            </div>
+            {items.length > 0 && selected.length === 0 && (
+                <p className="mt-2 text-xs font-semibold text-red">
+                    Pilih minimal satu poin checklist.
+                </p>
+            )}
+        </fieldset>
+    );
+}
+
+function ChecklistTab({ checklistItems }: { checklistItems: any[] }) {
+    const [name, setName] = useState("");
+    const [edit, setEdit] = useState<any>(null);
+    const [deleting, setDeleting] = useState<any>(null);
+
+    return (
+        <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+            <Panel className="overflow-hidden">
+                <div className="border-b bg-ink p-6 text-white">
+                    <p className="font-num text-[10px] font-bold uppercase tracking-[.18em] text-amber">
+                        Inspection standards
+                    </p>
+                    <h2 className="mt-1 font-display text-3xl font-bold">
+                        Master Checklist
+                    </h2>
+                    <p className="mt-2 max-w-2xl text-sm text-white/65">
+                        Kelola satu pustaka pemeriksaan yang dapat dipakai ulang
+                        oleh berbagai jenis aset.
+                    </p>
+                </div>
+                {checklistItems.map((item, index) => (
+                    <div
+                        key={item.id}
+                        className="grid gap-3 border-b p-4 last:border-0 sm:grid-cols-[44px_1fr_auto] sm:items-center"
+                    >
+                        <span className="grid size-9 place-items-center rounded bg-canvas font-num text-xs font-bold text-muted">
+                            {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <div>
+                            <strong className="block">{item.name}</strong>
+                            <small className="mt-1 block text-muted">
+                                Dipakai oleh {item.tool_types_count} master aset
+                            </small>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setEdit(item)}
+                                className="btn-secondary !min-h-9 !px-3"
+                            >
+                                <Pencil size={15} />
+                                Ubah
+                            </button>
+                            <button
+                                onClick={() => setDeleting(item)}
+                                disabled={item.tool_types_count > 0}
+                                title={
+                                    item.tool_types_count > 0
+                                        ? "Lepaskan dari semua master aset sebelum menghapus"
+                                        : "Hapus poin checklist"
+                                }
+                                className="btn-secondary !min-h-9 !border-red/30 !px-3 !text-red disabled:cursor-not-allowed disabled:opacity-35"
+                            >
+                                <Trash2 size={15} />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                {!checklistItems.length && (
+                    <div className="p-10 text-center text-sm text-muted">
+                        Belum ada poin checklist.
+                    </div>
+                )}
+            </Panel>
+            <Panel className="h-fit border-t-4 !border-t-amber p-5">
+                <p className="label">Poin pemeriksaan baru</p>
+                <h2 className="font-display text-2xl font-bold">
+                    Tambah Checklist
+                </h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                    Tulis satu pemeriksaan yang jelas dan dapat dijawab ya atau
+                    tidak.
+                </p>
+                <div className="mt-4 space-y-3">
+                    <Input
+                        label="Poin checklist"
+                        value={name}
+                        set={setName}
+                        placeholder="Contoh: Kabel daya tidak terkelupas"
+                    />
+                    <button
+                        disabled={!name.trim()}
+                        onClick={() =>
+                            router.post(
+                                "/administrasi/checklist",
+                                { name },
+                                { onSuccess: () => setName("") },
+                            )
+                        }
+                        className="btn-primary w-full"
+                    >
+                        <Plus size={17} />
+                        Tambah Poin
+                    </button>
+                </div>
+            </Panel>
+            {edit && (
+                <EditChecklistItem item={edit} close={() => setEdit(null)} />
+            )}
+            {deleting && (
+                <ConfirmDelete
+                    title="Hapus poin checklist?"
+                    description={`${deleting.name} akan dihapus dari master checklist.`}
+                    close={() => setDeleting(null)}
+                    confirm={() =>
+                        router.delete(
+                            `/administrasi/checklist/${deleting.id}`,
+                            { onSuccess: () => setDeleting(null) },
+                        )
+                    }
+                />
+            )}
+        </div>
+    );
+}
+
+function EditChecklistItem({ item, close }: any) {
+    const [name, setName] = useState(item.name);
+    return (
+        <Modal title="Ubah Poin Checklist" close={close}>
+            <Input label="Poin checklist" value={name} set={setName} />
+            <button
+                disabled={!name.trim()}
+                onClick={() =>
+                    router.put(
+                        `/administrasi/checklist/${item.id}`,
+                        { name },
+                        { onSuccess: close },
+                    )
+                }
+                className="btn-primary mt-5 w-full"
+            >
+                Simpan Perubahan
+            </button>
+        </Modal>
+    );
+}
+
 function MasterItemPreview({ item }: { item: any }) {
     return (
         <div className="rounded-md border border-green/20 bg-green/5 p-4">
@@ -1207,11 +1442,13 @@ function Input({
     value,
     set,
     type = "text",
+    placeholder,
 }: {
     label: string;
     value: any;
     set: (v: string) => void;
     type?: string;
+    placeholder?: string;
 }) {
     return (
         <label>
@@ -1220,6 +1457,7 @@ function Input({
                 type={type}
                 className="control"
                 value={value}
+                placeholder={placeholder}
                 onChange={(e) => set(e.target.value)}
             />
         </label>

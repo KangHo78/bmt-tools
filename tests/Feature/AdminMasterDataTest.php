@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
+use App\Models\ChecklistItem;
 use App\Models\Location;
 use App\Models\SsoItem;
 use App\Models\ToolType;
@@ -21,13 +22,15 @@ class AdminMasterDataTest extends TestCase
         $category = Category::create(['name' => 'Welding Tools']);
         $location = Location::create(['name' => 'Ruang Tools', 'type' => 'ruang']);
         $source = SsoItem::tools()->where('item_no', '603840')->firstOrFail();
+        $physicalCondition = ChecklistItem::create(['name' => 'Kondisi fisik']);
+        $completeness = ChecklistItem::create(['name' => 'Kelengkapan']);
 
         $this->actingAs($admin)->post(route('admin.tool-types.store'), [
             'sso_item_id' => $source->id,
             'category_id' => $category->id,
             'primary_location_id' => $location->id,
             'rules_summary' => 'Digunakan sesuai prosedur welding.',
-            'checklist_text' => "Kondisi fisik\nKelengkapan",
+            'checklist_item_ids' => [$physicalCondition->id, $completeness->id],
         ])->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('tool_types', [
@@ -37,6 +40,13 @@ class AdminMasterDataTest extends TestCase
             'manufacture_pn' => $source->manufacture_pn,
             'article_no' => $source->article_no,
             'unit' => $source->unit,
+        ]);
+        $toolType = ToolType::where('sso_item_id', $source->id)->firstOrFail();
+        $this->assertSame(['Kondisi fisik', 'Kelengkapan'], $toolType->checklist);
+        $this->assertDatabaseHas('checklist_item_tool_type', [
+            'tool_type_id' => $toolType->id,
+            'checklist_item_id' => $physicalCondition->id,
+            'position' => 0,
         ]);
     }
 
@@ -52,6 +62,8 @@ class AdminMasterDataTest extends TestCase
             'primary_location_id' => $location->id,
             'checklist' => ['Kabel'],
         ]);
+        $cable = ChecklistItem::create(['name' => 'Kabel']);
+        $chuckKey = ChecklistItem::create(['name' => 'Chuck key']);
 
         $this->actingAs($admin)->put("/administrasi/kategori/{$category->id}", [
             'name' => 'Perkakas Listrik',
@@ -66,7 +78,7 @@ class AdminMasterDataTest extends TestCase
             'size' => '13 mm',
             'description' => 'Bor listrik',
             'rules_summary' => 'Gunakan APD',
-            'checklist_text' => "Kabel\nChuck key",
+            'checklist_item_ids' => [$cable->id, $chuckKey->id],
         ])->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('categories', [
@@ -119,5 +131,31 @@ class AdminMasterDataTest extends TestCase
 
         $this->assertDatabaseHas('tool_types', ['id' => $toolType->id]);
         $this->assertDatabaseHas('categories', ['id' => $category->id]);
+    }
+
+    public function test_administrator_manages_reusable_checklist_master_data(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)->post(route('admin.checklists.store'), [
+            'name' => 'Kabel daya tidak terkelupas',
+        ])->assertSessionHasNoErrors();
+
+        $item = ChecklistItem::where('name', 'Kabel daya tidak terkelupas')->firstOrFail();
+
+        $this->actingAs($admin)->put(route('admin.checklists.update', $item), [
+            'name' => 'Kabel daya dalam kondisi baik',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('checklist_items', [
+            'id' => $item->id,
+            'name' => 'Kabel daya dalam kondisi baik',
+        ]);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.checklists.destroy', $item))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('checklist_items', ['id' => $item->id]);
     }
 }

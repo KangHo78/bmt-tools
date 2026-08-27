@@ -27,4 +27,11 @@ class ToolType extends Model
     {
         return $this->hasMany(ToolUnit::class);
     }
+
+    public function checklistItems()
+    {
+        return $this->belongsToMany(ChecklistItem::class)
+            ->withPivot('position')
+            ->orderByPivot('position');
+    }
 }

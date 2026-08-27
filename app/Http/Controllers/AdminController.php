@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Borrower;
 use App\Models\Category;
+use App\Models\ChecklistItem;
 use App\Models\Location;
 use App\Models\PhysicalToken;
 use App\Models\SsoItem;
@@ -27,7 +28,8 @@ class AdminController extends Controller
             'users' => User::orderBy('name')->get(), 'activity' => ActivityLog::with('user:id,name')->latest()->limit(30)->get(),
             'borrowers' => Borrower::with(['user:id,email', 'tokens' => fn ($query) => $query->orderBy('code')])->orderBy('name')->get(),
             'categories' => Category::orderBy('name')->get(), 'locations' => Location::withCount('units')->with('parent:id,name')->orderBy('name')->get(),
-            'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name'])->orderBy('name')->get(),
+            'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name', 'checklistItems:id,name'])->orderBy('name')->get(),
+            'checklistItems' => ChecklistItem::withCount('toolTypes')->orderBy('name')->get(),
             'settings' => SystemSetting::where('key', '!=', ApprovalConfiguration::SETTING_KEY)->orderBy('key')->get(),
             'approvalCandidates' => $approvalConfiguration->eligibleQuery()->orderBy('name')->get(['id', 'name', 'email', 'role', 'institution']),
             'approvalUserIds' => $approvalConfiguration->approverIds(),
@@ -150,7 +152,14 @@ class AdminController extends Controller
     public function storeToolType(Request $request)
     {
         $data = $this->toolTypeData($request);
-        $model = ToolType::create($data);
+        $checklistItemIds = $data['checklist_item_ids'];
+        unset($data['checklist_item_ids']);
+        $model = DB::transaction(function () use ($data, $checklistItemIds) {
+            $model = ToolType::create($data);
+            $this->syncToolTypeChecklist($model, $checklistItemIds);
+
+            return $model;
+        });
         AuditLogger::record('tool_type.created', $model);
 
         return back()->with('success', 'Jenis alat ditambahkan.');
@@ -159,7 +168,13 @@ class AdminController extends Controller
     public function updateToolType(Request $request, ToolType $toolType)
     {
         $before = $toolType->only(['code', 'name', 'category_id', 'primary_location_id', 'size', 'description', 'rules_summary', 'checklist']);
-        $toolType->update($this->toolTypeData($request, $toolType));
+        $data = $this->toolTypeData($request, $toolType);
+        $checklistItemIds = $data['checklist_item_ids'];
+        unset($data['checklist_item_ids']);
+        DB::transaction(function () use ($toolType, $data, $checklistItemIds) {
+            $toolType->update($data);
+            $this->syncToolTypeChecklist($toolType, $checklistItemIds);
+        });
         AuditLogger::record('tool_type.updated', $toolType, ['before' => $before, 'after' => $toolType->only(array_keys($before))]);
 
         return back()->with('success', 'Master aset diperbarui.');
@@ -218,7 +233,9 @@ class AdminController extends Controller
             'category_id' => ['required', 'exists:categories,id'],
             'primary_location_id' => ['required', 'exists:locations,id'],
             'rules_summary' => ['nullable', 'string'],
-            'checklist_text' => ['required', 'string'],
+            'checklist_item_ids' => ['required_without:checklist_text', 'array', 'min:1'],
+            'checklist_item_ids.*' => ['integer', 'distinct', 'exists:checklist_items,id'],
+            'checklist_text' => ['required_without:checklist_item_ids', 'nullable', 'string'],
         ]);
         $sourceId = $data['sso_item_id'] ?? $toolType?->sso_item_id;
         if ($sourceId) {
@@ -254,10 +271,67 @@ class AdminController extends Controller
             ]);
             $data = array_merge($data, $legacy);
         }
-        $data['checklist'] = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $data['checklist_text']))));
+        $checklistItemIds = array_map('intval', $data['checklist_item_ids'] ?? []);
+        if ($checklistItemIds === []) {
+            $legacyNames = array_values(array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', (string) $data['checklist_text']))));
+            $checklistItemIds = array_map(
+                fn (string $name) => ChecklistItem::firstOrCreate(['name' => $name])->id,
+                $legacyNames,
+            );
+        }
+        $items = ChecklistItem::whereIn('id', $checklistItemIds)->get()->keyBy('id');
+        $data['checklist'] = array_values(array_map(fn (int $id) => $items[$id]->name, $checklistItemIds));
+        $data['checklist_item_ids'] = $checklistItemIds;
         unset($data['checklist_text']);
 
         return $data;
+    }
+
+    /** @param list<int> $ids */
+    private function syncToolTypeChecklist(ToolType $toolType, array $ids): void
+    {
+        $toolType->checklistItems()->sync(collect($ids)->mapWithKeys(
+            fn (int $id, int $position) => [$id => ['position' => $position]],
+        ));
+    }
+
+    public function storeChecklistItem(Request $request)
+    {
+        $item = ChecklistItem::create($this->checklistItemData($request));
+        AuditLogger::record('checklist_item.created', $item);
+
+        return back()->with('success', 'Poin checklist ditambahkan.');
+    }
+
+    public function updateChecklistItem(Request $request, ChecklistItem $checklistItem)
+    {
+        $before = $checklistItem->name;
+        $checklistItem->update($this->checklistItemData($request, $checklistItem));
+        $checklistItem->toolTypes()->each(function (ToolType $toolType): void {
+            $toolType->update(['checklist' => $toolType->checklistItems()->pluck('name')->all()]);
+        });
+        AuditLogger::record('checklist_item.updated', $checklistItem, ['before' => $before, 'after' => $checklistItem->name]);
+
+        return back()->with('success', 'Poin checklist diperbarui.');
+    }
+
+    public function destroyChecklistItem(ChecklistItem $checklistItem)
+    {
+        if ($checklistItem->toolTypes()->exists()) {
+            return back()->with('error', 'Poin checklist masih digunakan oleh master aset dan tidak dapat dihapus.');
+        }
+
+        AuditLogger::record('checklist_item.deleted', $checklistItem, ['name' => $checklistItem->name]);
+        $checklistItem->delete();
+
+        return back()->with('success', 'Poin checklist dihapus.');
+    }
+
+    private function checklistItemData(Request $request, ?ChecklistItem $checklistItem = null): array
+    {
+        return $request->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('checklist_items')->ignore($checklistItem)],
+        ]);
     }
 
     public function updateSettings(Request $request)

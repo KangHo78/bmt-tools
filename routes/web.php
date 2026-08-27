@@ -97,6 +97,9 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::post('/administrasi/kategori', [AdminController::class, 'storeCategory'])->name('admin.categories.store');
         Route::put('/administrasi/kategori/{category}', [AdminController::class, 'updateCategory'])->name('admin.categories.update');
         Route::delete('/administrasi/kategori/{category}', [AdminController::class, 'destroyCategory'])->name('admin.categories.destroy');
+        Route::post('/administrasi/checklist', [AdminController::class, 'storeChecklistItem'])->name('admin.checklists.store');
+        Route::put('/administrasi/checklist/{checklistItem}', [AdminController::class, 'updateChecklistItem'])->name('admin.checklists.update');
+        Route::delete('/administrasi/checklist/{checklistItem}', [AdminController::class, 'destroyChecklistItem'])->name('admin.checklists.destroy');
         Route::post('/administrasi/lokasi', [AdminController::class, 'storeLocation'])->name('admin.locations.store');
         Route::post('/administrasi/jenis-alat', [AdminController::class, 'storeToolType'])->name('admin.tool-types.store');
         Route::put('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'updateToolType'])->name('admin.tool-types.update');
