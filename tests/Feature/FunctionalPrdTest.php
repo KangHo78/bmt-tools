@@ -40,12 +40,13 @@ class FunctionalPrdTest extends TestCase
 
         $this->actingAs($staff)->post(route('inventory.receipts.store'), [
             'request_reference' => 'REQ-001', 'owner_institution' => 'Workshop Sipil', 'received_date' => today()->toDateString(),
-            'items' => [['tool_type_id' => $type->id, 'location_id' => $location->id, 'requested_quantity' => 2, 'received_quantity' => 2, 'initial_condition' => 'baik']],
+            'items' => [['tool_type_id' => $type->id, 'location_id' => $location->id, 'received_quantity' => 2, 'initial_condition' => 'baik']],
         ])->assertRedirect();
 
         $receipt = AssetReceipt::latest('id')->firstOrFail();
         $this->assertSame(2, ToolUnit::where('tool_type_id', $type->id)->count() - $before);
         $this->assertCount(2, $receipt->items->first()->units);
+        $this->assertSame(2, $receipt->items->first()->requested_quantity);
         $this->assertSame(2, $receipt->items->first()->units->pluck('asset_code')->unique()->count());
         $this->assertSame(
             [$type->code.'.1', $type->code.'.2'],

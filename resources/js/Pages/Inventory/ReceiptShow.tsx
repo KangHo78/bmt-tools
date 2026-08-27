@@ -6,9 +6,11 @@ import { formatDate } from "@/lib/ui";
 
 export default function ReceiptShow({ receipt }: { receipt: any }) {
     const total = receipt.items.reduce(
-        (n: number, x: any) => n + x.received_quantity,
+        (quantity: number, item: any) =>
+            quantity + item.received_quantity,
         0,
     );
+
     return (
         <TamsLayout>
             <Head title={receipt.reference_no} />
@@ -54,10 +56,14 @@ export default function ReceiptShow({ receipt }: { receipt: any }) {
                                         {item.tool_type.name}
                                     </h3>
                                     <p className="mt-1 text-xs text-muted">
-                                        {item.received_quantity}/
-                                        {item.requested_quantity} diterima ·{" "}
+                                        {item.received_quantity} unit diterima ·{" "}
                                         {item.location.name}
                                     </p>
+                                    {item.source_reference && (
+                                        <p className="mt-2 inline-flex rounded-full border border-amber/40 bg-amber/10 px-2.5 py-1 font-num text-[10px] font-bold">
+                                            Sumber {item.source_reference}
+                                        </p>
+                                    )}
                                 </div>
                                 <StatusBadge
                                     status={
@@ -68,20 +74,15 @@ export default function ReceiptShow({ receipt }: { receipt: any }) {
                                 />
                             </div>
                             <div className="mt-4 flex flex-wrap gap-2">
-                                {item.units.map((u: any) => (
+                                {item.units.map((unit: any) => (
                                     <span
-                                        key={u.id}
+                                        key={unit.id}
                                         className="rounded border bg-canvas px-2 py-1 font-num text-[10px] font-bold"
                                     >
-                                        {u.asset_code}
+                                        {unit.asset_code}
                                     </span>
                                 ))}
                             </div>
-                            {item.difference_reason && (
-                                <p className="mt-3 rounded border border-amber/40 bg-amber/10 p-2 text-xs">
-                                    Selisih: {item.difference_reason}
-                                </p>
-                            )}
                         </div>
                     ))}
                 </Panel>
@@ -93,6 +94,7 @@ export default function ReceiptShow({ receipt }: { receipt: any }) {
                             value={formatDate(receipt.received_date)}
                         />
                         <Meta label="Petugas" value={receipt.receiver.name} />
+                        <Meta label="Owner" value={receipt.owner_institution} />
                         <Meta
                             label="Referensi permohonan"
                             value={receipt.request_reference ?? "—"}
@@ -114,6 +116,7 @@ export default function ReceiptShow({ receipt }: { receipt: any }) {
         </TamsLayout>
     );
 }
+
 function Meta({ label, value }: { label: string; value: string }) {
     return (
         <div>
