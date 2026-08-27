@@ -1,6 +1,11 @@
 import { Link } from "@inertiajs/react";
 import { Box, ChevronRight } from "lucide-react";
-import type { PropsWithChildren, ReactNode } from "react";
+import {
+    useEffect,
+    useState,
+    type PropsWithChildren,
+    type ReactNode,
+} from "react";
 import { statusMeta, toneClass } from "@/lib/ui";
 
 export function Panel({
@@ -153,6 +158,47 @@ export function AssetGlyph({
                 </span>
             </div>
             <span className="absolute bottom-2 right-2 font-num text-[10px] text-muted">
+                {code}
+            </span>
+        </div>
+    );
+}
+
+export function AssetVisual({
+    code,
+    imageUrl,
+    alt,
+    className = "",
+    eager = false,
+}: {
+    code: string;
+    imageUrl?: string | null;
+    alt: string;
+    className?: string;
+    eager?: boolean;
+}) {
+    const [failed, setFailed] = useState(false);
+
+    useEffect(() => setFailed(false), [imageUrl]);
+
+    if (!imageUrl || failed) {
+        return <AssetGlyph code={code} className={className} />;
+    }
+
+    return (
+        <div
+            className={`relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[#e7e4da] ${className}`}
+        >
+            <div className="absolute inset-0 bg-grid opacity-35" />
+            <img
+                src={imageUrl}
+                alt={alt}
+                loading={eager ? "eager" : "lazy"}
+                decoding="async"
+                onError={() => setFailed(true)}
+                className="relative size-full object-contain p-4 transition duration-300 group-hover:scale-[1.03]"
+            />
+            <span className="absolute bottom-2 right-2 rounded bg-surface/90 px-2 py-1 font-num text-[10px] font-bold text-muted shadow-sm backdrop-blur">
                 {code}
             </span>
         </div>

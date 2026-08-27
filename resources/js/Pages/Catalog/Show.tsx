@@ -8,7 +8,7 @@ import {
     ShieldCheck,
 } from "lucide-react";
 import TamsLayout from "@/Layouts/TamsLayout";
-import { AssetGlyph, Panel, StatusBadge } from "@/Components/TamsUI";
+import { AssetVisual, Panel, StatusBadge } from "@/Components/TamsUI";
 import type { PageProps, ToolType } from "@/types/tams";
 
 export default function Show({ tool }: { tool: ToolType }) {
@@ -28,7 +28,13 @@ export default function Show({ tool }: { tool: ToolType }) {
             </Link>
             <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
                 <Panel className="overflow-hidden">
-                    <AssetGlyph code={tool.code} className="min-h-72" />
+                    <AssetVisual
+                        code={tool.code}
+                        imageUrl={tool.catalog_image_url}
+                        alt={tool.name}
+                        className="min-h-72"
+                        eager
+                    />
                 </Panel>
                 <div>
                     <div className="flex flex-wrap items-start justify-between gap-4">

@@ -23,6 +23,7 @@ export interface ToolType {
     description?: string;
     rules_summary?: string;
     image_url?: string;
+    catalog_image_url?: string | null;
     checklist?: string[];
     category?: { id: number; name: string };
     primary_location?: { id: number; name: string };
@@ -51,7 +52,14 @@ export interface LoanItem {
     return_note?: string;
     physical_token?: { id: number; code: string; status: string };
 }
-export interface Borrower { id:number; name:string; institution?:string; phone?:string; identifier?:string; user?: Pick<User,"id"|"email"> }
+export interface Borrower {
+    id: number;
+    name: string;
+    institution?: string;
+    phone?: string;
+    identifier?: string;
+    user?: Pick<User, "id" | "email">;
+}
 export interface Loan {
     id: number;
     trx_no: string;

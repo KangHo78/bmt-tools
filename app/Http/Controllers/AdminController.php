@@ -12,6 +12,7 @@ use App\Models\SsoItem;
 use App\Models\SystemSetting;
 use App\Models\ToolType;
 use App\Models\User;
+use App\Services\MasterAssetExcelService;
 use App\Support\ApprovalConfiguration;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
 {
@@ -165,6 +167,32 @@ class AdminController extends Controller
         return back()->with('success', 'Jenis alat ditambahkan.');
     }
 
+    public function downloadToolTypeImportTemplate(MasterAssetExcelService $excel): StreamedResponse
+    {
+        $spreadsheet = $excel->template();
+
+        return response()->streamDownload(function () use ($excel, $spreadsheet): void {
+            $excel->writer($spreadsheet)->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, 'template-import-master-aset.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function importToolTypes(Request $request, MasterAssetExcelService $excel)
+    {
+        $data = $request->validate([
+            'import_file' => ['required', 'file', 'mimes:xlsx,xls', 'max:5120'],
+        ], [
+            'import_file.required' => 'Pilih file Excel yang akan diimpor.',
+            'import_file.mimes' => 'File harus berformat .xlsx atau .xls.',
+            'import_file.max' => 'Ukuran file Excel maksimal 5 MB.',
+        ]);
+        $result = $excel->import($data['import_file']);
+
+        return back()->with('success', "Import selesai: {$result['created']} master aset ditambahkan dan {$result['updated']} diperbarui.");
+    }
+
     public function updateToolType(Request $request, ToolType $toolType)
     {
         $before = $toolType->only(['code', 'name', 'category_id', 'primary_location_id', 'size', 'description', 'rules_summary', 'checklist']);
@@ -260,7 +288,7 @@ class AdminController extends Controller
                 'unit' => $source->unit,
                 'size' => $source->article_no,
                 'description' => $source->specification,
-                'image_url' => $source->datasheet,
+                'image_url' => $source->image,
             ]);
         } else {
             $legacy = $request->validate([

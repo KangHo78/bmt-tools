@@ -4,7 +4,7 @@ import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import SearchableSelect from "@/Components/SearchableSelect";
 import {
-    AssetGlyph,
+    AssetVisual,
     EmptyState,
     PageHeader,
     Pagination,
@@ -84,7 +84,11 @@ export default function Index({
                                 href={`/katalog/${tool.id}`}
                                 className="panel group overflow-hidden hover:-translate-y-1 hover:border-ink hover:shadow-xl"
                             >
-                                <AssetGlyph code={tool.code} />
+                                <AssetVisual
+                                    code={tool.code}
+                                    imageUrl={tool.catalog_image_url}
+                                    alt={tool.name}
+                                />
                                 <div className="p-4">
                                     <div className="flex items-center justify-between">
                                         <span className="font-num text-[11px] font-bold text-muted">

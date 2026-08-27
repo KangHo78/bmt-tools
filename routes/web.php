@@ -102,6 +102,8 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::delete('/administrasi/checklist/{checklistItem}', [AdminController::class, 'destroyChecklistItem'])->name('admin.checklists.destroy');
         Route::post('/administrasi/lokasi', [AdminController::class, 'storeLocation'])->name('admin.locations.store');
         Route::post('/administrasi/jenis-alat', [AdminController::class, 'storeToolType'])->name('admin.tool-types.store');
+        Route::get('/administrasi/jenis-alat/template-import', [AdminController::class, 'downloadToolTypeImportTemplate'])->name('admin.tool-types.import-template');
+        Route::post('/administrasi/jenis-alat/import', [AdminController::class, 'importToolTypes'])->name('admin.tool-types.import');
         Route::put('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'updateToolType'])->name('admin.tool-types.update');
         Route::delete('/administrasi/jenis-alat/{toolType}', [AdminController::class, 'destroyToolType'])->name('admin.tool-types.destroy');
         Route::post('/administrasi/pengaturan', [AdminController::class, 'updateSettings'])->name('admin.settings.update');

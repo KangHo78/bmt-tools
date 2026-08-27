@@ -8,9 +8,33 @@ class ToolType extends Model
 {
     protected $guarded = [];
 
+    protected $appends = ['catalog_image_url'];
+
     protected function casts(): array
     {
         return ['checklist' => 'array', 'requires_outside_letter' => 'boolean'];
+    }
+
+    public function getCatalogImageUrlAttribute(): ?string
+    {
+        $source = trim((string) $this->image_url);
+        if ($source === '') {
+            return null;
+        }
+
+        $path = parse_url($source, PHP_URL_PATH) ?: $source;
+        if (! preg_match('/\.(?:avif|gif|jpe?g|png|svg|webp)$/i', $path)) {
+            return null;
+        }
+
+        if (filter_var($source, FILTER_VALIDATE_URL)) {
+            return $source;
+        }
+
+        $path = ltrim(str_replace('\\', '/', $source), '/');
+        $path = preg_replace('#^(?:api/)?uploads/#i', '', $path);
+
+        return rtrim((string) config('sso.uploads_url'), '/').'/'.$path;
     }
 
     public function category()

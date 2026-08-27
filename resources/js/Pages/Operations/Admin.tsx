@@ -3,6 +3,8 @@ import {
     ArrowRight,
     Boxes,
     Check,
+    Download,
+    FileSpreadsheet,
     KeyRound,
     ListChecks,
     MapPinned,
@@ -12,6 +14,7 @@ import {
     ShieldCheck,
     Tags,
     Trash2,
+    Upload,
     Users,
     UserPlus,
 } from "lucide-react";
@@ -604,6 +607,7 @@ function MasterTab({
 }: any) {
     const [edit, setEdit] = useState<any>(null);
     const [deleting, setDeleting] = useState<any>(null);
+    const [importing, setImporting] = useState(false);
     const [d, setD] = useState({
         sso_item_id: "",
         category_id: "",
@@ -617,10 +621,23 @@ function MasterTab({
     return (
         <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
             <Panel className="overflow-hidden">
-                <div className="border-b p-5">
-                    <h2 className="font-display text-2xl font-bold">
-                        Jenis Alat
-                    </h2>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
+                    <div>
+                        <h2 className="font-display text-2xl font-bold">
+                            Jenis Alat
+                        </h2>
+                        <p className="mt-1 text-sm text-muted">
+                            {toolTypes.length} master aset terdaftar
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setImporting(true)}
+                        className="btn-secondary"
+                    >
+                        <FileSpreadsheet size={16} />
+                        Import Excel
+                    </button>
                 </div>
                 {toolTypes.map((t: any) => (
                     <div
@@ -750,6 +767,9 @@ function MasterTab({
                     close={() => setEdit(null)}
                 />
             )}
+            {importing && (
+                <ImportMasterAssets close={() => setImporting(false)} />
+            )}
             {deleting && (
                 <ConfirmDelete
                     title="Hapus master aset?"
@@ -764,6 +784,121 @@ function MasterTab({
                 />
             )}
         </div>
+    );
+}
+
+function ImportMasterAssets({ close }: { close: () => void }) {
+    const form = useForm<{ import_file: File | null }>({
+        import_file: null,
+    });
+    const error = form.errors.import_file;
+
+    return (
+        <Modal title="Import Master Aset" close={close}>
+            <div className="overflow-hidden rounded-md border border-line bg-canvas">
+                <div className="grid gap-4 border-b border-line bg-ink p-5 text-white sm:grid-cols-[auto_1fr] sm:items-center">
+                    <span className="grid size-12 place-items-center rounded-md border border-amber/50 bg-amber text-ink">
+                        <FileSpreadsheet size={25} />
+                    </span>
+                    <div>
+                        <p className="font-num text-[10px] font-bold uppercase tracking-[.18em] text-amber">
+                            Bulk data entry
+                        </p>
+                        <h3 className="mt-1 font-display text-2xl font-bold">
+                            Isi template, lalu unggah kembali
+                        </h3>
+                        <p className="mt-1 text-sm leading-relaxed text-white/65">
+                            Item baru ditambahkan dan item yang sudah ada
+                            diperbarui berdasarkan ITEM NO.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="space-y-4 p-5">
+                    <a
+                        href="/administrasi/jenis-alat/template-import"
+                        className="btn-secondary w-full justify-center !border-green/30 !bg-green/10 !text-green"
+                    >
+                        <Download size={16} />
+                        Unduh Template Excel
+                    </a>
+
+                    <label
+                        className={`group flex cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed px-5 py-8 text-center transition-colors ${
+                            form.data.import_file
+                                ? "border-green bg-green/10"
+                                : "border-line bg-surface hover:border-amber hover:bg-amber/5"
+                        }`}
+                    >
+                        <input
+                            type="file"
+                            accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                            className="sr-only"
+                            onChange={(event) => {
+                                form.clearErrors("import_file");
+                                form.setData(
+                                    "import_file",
+                                    event.target.files?.[0] ?? null,
+                                );
+                            }}
+                        />
+                        <span className="grid size-10 place-items-center rounded-full bg-ink text-white transition-transform group-hover:-translate-y-0.5">
+                            <Upload size={18} />
+                        </span>
+                        <strong className="mt-3 block text-sm">
+                            {form.data.import_file
+                                ? form.data.import_file.name
+                                : "Pilih file Excel"}
+                        </strong>
+                        <small className="mt-1 text-muted">
+                            XLSX atau XLS, maksimal 5 MB dan 1.000 baris
+                        </small>
+                    </label>
+
+                    {error && (
+                        <div
+                            role="alert"
+                            className="whitespace-pre-line rounded-md border border-red/25 bg-red/10 p-3 text-sm leading-relaxed text-red"
+                        >
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="rounded-md border border-line bg-surface p-4 text-xs leading-relaxed text-muted">
+                        <strong className="mb-1 block text-ink">
+                            Sebelum mengimpor
+                        </strong>
+                        Kategori dan lokasi harus sudah tersedia. Pisahkan
+                        beberapa poin checklist dengan tanda |. Seluruh file
+                        dibatalkan jika ada satu baris yang tidak valid.
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <button type="button" onClick={close} className="btn-secondary">
+                    Batal
+                </button>
+                <button
+                    type="button"
+                    disabled={!form.data.import_file || form.processing}
+                    onClick={() =>
+                        form.post("/administrasi/jenis-alat/import", {
+                            forceFormData: true,
+                            preserveScroll: true,
+                            onSuccess: () => {
+                                form.reset();
+                                close();
+                            },
+                        })
+                    }
+                    className="btn-primary"
+                >
+                    <Upload size={16} />
+                    {form.processing ? "Mengimpor..." : "Import Sekarang"}
+                </button>
+            </div>
+        </Modal>
     );
 }
 function EditToolType({

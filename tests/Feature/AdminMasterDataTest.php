@@ -9,12 +9,55 @@ use App\Models\SsoItem;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 
 class AdminMasterDataTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        if (DB::connection('sso')->getDriverName() !== 'sqlite') {
+            return;
+        }
+
+        Schema::connection('sso')->dropIfExists('m_item');
+        Schema::connection('sso')->create('m_item', function (Blueprint $table) {
+            $table->id();
+            $table->string('item_no')->unique();
+            $table->string('item_name');
+            $table->string('item_type')->default('Tool');
+            $table->boolean('is_active')->default(true);
+            $table->unsignedTinyInteger('flag')->default(1);
+            $table->string('manufacture_pn')->nullable();
+            $table->string('original_manufacture')->nullable();
+            $table->string('article_no')->nullable();
+            $table->string('unit')->nullable();
+            $table->text('specification')->nullable();
+            $table->string('image')->nullable();
+        });
+        DB::connection('sso')->table('m_item')->insert([
+            'item_no' => '603840',
+            'item_name' => 'Mesin Las Uji',
+            'item_type' => 'Tool',
+            'is_active' => true,
+            'flag' => 1,
+            'manufacture_pn' => 'PN-603840',
+            'original_manufacture' => 'Pabrikan Uji',
+            'article_no' => 'ART-01',
+            'unit' => 'PCS',
+            'specification' => 'Spesifikasi alat uji',
+        ]);
+    }
 
     public function test_administrator_creates_master_asset_from_buana_multi_item(): void
     {
@@ -157,5 +200,78 @@ class AdminMasterDataTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertDatabaseMissing('checklist_items', ['id' => $item->id]);
+    }
+
+    public function test_administrator_imports_and_updates_master_assets_from_excel(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $category = Category::create(['name' => 'Perkakas']);
+        $secondCategory = Category::create(['name' => 'Perkakas Khusus']);
+        $location = Location::create(['name' => 'Rak Import', 'type' => 'rak']);
+        $source = SsoItem::tools()->firstOrFail();
+
+        $firstFile = $this->masterAssetWorkbook([
+            [$source->item_no, $category->name, $location->name, 'Gunakan APD', 'Kondisi fisik | Kelengkapan'],
+        ]);
+        $this->actingAs($admin)
+            ->post(route('admin.tool-types.import'), ['import_file' => $firstFile])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Import selesai: 1 master aset ditambahkan dan 0 diperbarui.');
+
+        $toolType = ToolType::where('sso_item_id', $source->id)->firstOrFail();
+        $this->assertSame(['Kondisi fisik', 'Kelengkapan'], $toolType->checklist);
+        $this->assertDatabaseHas('checklist_items', ['name' => 'Kelengkapan']);
+
+        $secondFile = $this->masterAssetWorkbook([
+            [$source->item_no, $secondCategory->name, $location->name, 'Aturan diperbarui', 'Kondisi fisik'],
+        ]);
+        $this->actingAs($admin)
+            ->post(route('admin.tool-types.import'), ['import_file' => $secondFile])
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Import selesai: 0 master aset ditambahkan dan 1 diperbarui.');
+
+        $toolType->refresh();
+        $this->assertSame($secondCategory->id, $toolType->category_id);
+        $this->assertSame('Aturan diperbarui', $toolType->rules_summary);
+        $this->assertSame(['Kondisi fisik'], $toolType->checklist);
+    }
+
+    public function test_invalid_excel_row_does_not_partially_import_master_assets(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $category = Category::create(['name' => 'Perkakas']);
+        $location = Location::create(['name' => 'Rak Import', 'type' => 'rak']);
+        $source = SsoItem::tools()->firstOrFail();
+        $file = $this->masterAssetWorkbook([
+            [$source->item_no, $category->name, $location->name, '', 'Kondisi fisik'],
+            ['ITEM-TIDAK-ADA', $category->name, $location->name, '', 'Kondisi fisik'],
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.tool-types.import'), ['import_file' => $file])
+            ->assertSessionHasErrors('import_file');
+
+        $this->assertDatabaseMissing('tool_types', ['sso_item_id' => $source->id]);
+    }
+
+    /** @param list<array<int, string|null>> $rows */
+    private function masterAssetWorkbook(array $rows): UploadedFile
+    {
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getActiveSheet()->fromArray([
+            ['ITEM NO', 'KATEGORI', 'LOKASI UTAMA', 'ATURAN PEMINJAMAN', 'CHECKLIST'],
+            ...$rows,
+        ]);
+        $path = tempnam(sys_get_temp_dir(), 'master-asset-import-');
+        (new Xlsx($spreadsheet))->save($path);
+        $spreadsheet->disconnectWorksheets();
+
+        return new UploadedFile(
+            $path,
+            'master-aset.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true,
+        );
     }
 }
