@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\Location;
 use App\Models\SsoItem;
 use App\Models\ToolType;
 use Illuminate\Http\Request;
@@ -13,14 +14,33 @@ class CatalogController extends Controller
 {
     public function index(Request $request)
     {
+        $filters = $request->only([
+            'q', 'category', 'item_no', 'item_name', 'item_unit', 'original_manufacture',
+            'manufacture_pn', 'article_no', 'specification', 'primary_location', 'availability',
+        ]);
         $tools = ToolType::query()->with(['category:id,name', 'primaryLocation:id,name'])
             ->withCount(['units', 'units as available_count' => fn ($q) => $q->where('status', 'tersedia')])
             ->when($request->string('q')->isNotEmpty(), fn ($q) => $q->where(fn ($sub) => $sub->where('name', 'like', '%'.$request->q.'%')->orWhere('code', 'like', '%'.$request->q.'%')))
             ->when($request->category, fn ($q, $category) => $q->where('category_id', $category))
+            ->when($request->string('item_no')->isNotEmpty(), fn ($q) => $q->where('code', 'like', '%'.$request->item_no.'%'))
+            ->when($request->string('item_name')->isNotEmpty(), fn ($q) => $q->where('name', 'like', '%'.$request->item_name.'%'))
+            ->when($request->string('item_unit')->isNotEmpty(), fn ($q) => $q->where('unit', 'like', '%'.$request->item_unit.'%'))
+            ->when($request->string('original_manufacture')->isNotEmpty(), fn ($q) => $q->where('original_manufacture', 'like', '%'.$request->original_manufacture.'%'))
+            ->when($request->string('manufacture_pn')->isNotEmpty(), fn ($q) => $q->where('manufacture_pn', 'like', '%'.$request->manufacture_pn.'%'))
+            ->when($request->string('article_no')->isNotEmpty(), fn ($q) => $q->where('article_no', 'like', '%'.$request->article_no.'%'))
+            ->when($request->string('specification')->isNotEmpty(), fn ($q) => $q->where('description', 'like', '%'.$request->specification.'%'))
+            ->when($request->integer('primary_location'), fn ($q, $location) => $q->where('primary_location_id', $location))
+            ->when($request->availability === 'available', fn ($q) => $q->whereHas('units', fn ($unit) => $unit->where('status', 'tersedia')))
+            ->when($request->availability === 'unavailable', fn ($q) => $q->whereDoesntHave('units', fn ($unit) => $unit->where('status', 'tersedia')))
             ->orderBy('name')->paginate(12)->withQueryString();
         $this->applyBuanaMultiImages($tools->getCollection());
 
-        return Inertia::render('Catalog/Index', ['tools' => $tools, 'categories' => Category::orderBy('name')->get(['id', 'name']), 'filters' => $request->only('q', 'category')]);
+        return Inertia::render('Catalog/Index', [
+            'tools' => $tools,
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'locations' => Location::orderBy('name')->get(['id', 'name']),
+            'filters' => $filters,
+        ]);
     }
 
     public function show(ToolType $toolType)
