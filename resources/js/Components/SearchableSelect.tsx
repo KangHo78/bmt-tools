@@ -4,6 +4,7 @@ import {
     isValidElement,
     type ReactNode,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -79,19 +80,44 @@ export default function SearchableSelect({
     const placeMenu = () => {
         const rect = buttonRef.current?.getBoundingClientRect();
         if (rect) {
-            const menuHeight = 330;
-            const roomBelow = window.innerHeight - rect.bottom;
-            const top =
-                roomBelow < menuHeight && rect.top > roomBelow
-                    ? Math.max(8, rect.top - menuHeight - 6)
-                    : rect.bottom + 6;
+            const gap = 6;
+            const screenPadding = 8;
+            const estimatedMenuHeight =
+                62 + Math.min(256, Math.max(50, filtered.length * 44 + 12));
+            const menuHeight =
+                menuRef.current?.getBoundingClientRect().height ||
+                estimatedMenuHeight;
+            const roomBelow = window.innerHeight - rect.bottom - screenPadding;
+            const roomAbove = rect.top - screenPadding;
+            const openAbove = roomBelow < menuHeight && roomAbove > roomBelow;
+            const top = openAbove
+                ? Math.max(screenPadding, rect.top - menuHeight - gap)
+                : Math.min(
+                      rect.bottom + gap,
+                      window.innerHeight - menuHeight - screenPadding,
+                  );
             setPosition({
-                left: rect.left,
+                left: Math.max(
+                    screenPadding,
+                    Math.min(
+                        rect.left,
+                        window.innerWidth - rect.width - screenPadding,
+                    ),
+                ),
                 top,
                 width: rect.width,
             });
         }
     };
+
+    const openMenu = () => {
+        placeMenu();
+        setOpen(true);
+    };
+
+    useLayoutEffect(() => {
+        if (open) placeMenu();
+    }, [open, query, filtered.length]);
 
     useEffect(() => {
         if (!open) return;
@@ -137,11 +163,11 @@ export default function SearchableSelect({
                 aria-label={ariaLabel}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                onClick={() => setOpen((current) => !current)}
+                onClick={() => (open ? setOpen(false) : openMenu())}
                 onKeyDown={(event) => {
                     if (["ArrowDown", "Enter", " "].includes(event.key)) {
                         event.preventDefault();
-                        setOpen(true);
+                        openMenu();
                     }
                 }}
                 className={`control flex w-full items-center justify-between gap-3 text-left disabled:cursor-not-allowed disabled:opacity-50 ${className}`}

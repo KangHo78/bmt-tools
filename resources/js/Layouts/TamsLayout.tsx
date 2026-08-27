@@ -162,7 +162,7 @@ export default function TamsLayout({ children }: PropsWithChildren) {
                     </button>
                     <button
                         onClick={() => setScan(true)}
-                        className="btn-secondary !min-h-10 !px-3"
+                        className="btn-secondary ml-auto !min-h-10 !px-3"
                     >
                         <ScanLine size={18} />
                         <span className="hidden sm:inline">Scan</span>
