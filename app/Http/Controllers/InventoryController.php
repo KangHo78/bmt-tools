@@ -139,7 +139,7 @@ class InventoryController extends Controller
                     do {
                         $code = sprintf('%s.%d', $type->code, $sequence++);
                     } while (ToolUnit::where('asset_code', $code)->exists());
-                    ToolUnit::create(['tool_type_id' => $type->id, 'asset_receipt_item_id' => $item->id, 'asset_code' => $code, 'status' => $row['initial_condition'] === 'rusak' ? 'rusak' : 'tersedia', 'condition' => $row['initial_condition'], 'location_id' => $row['location_id'], 'owner' => $owner, 'received_at' => $data['received_date']]);
+                    ToolUnit::create(['tool_type_id' => $type->id, 'asset_receipt_item_id' => $item->id, 'asset_code' => $code, 'status' => $row['initial_condition'] === 'rusak' ? 'rusak' : 'tersedia', 'condition' => $row['initial_condition'], 'location_id' => $row['location_id'], 'owner' => $owner, 'owner_sso_user_id' => $data['owner_sso_user_id'] ?? null, 'source_npb_id' => $row['source_npb_id'] ?? null, 'source_npb_item_id' => $row['source_npb_item_id'] ?? null, 'source_reference' => $row['source_reference'] ?? null, 'received_at' => $data['received_date']]);
                 }
             }
             AuditLogger::record('asset.received', $receipt, ['items' => count($data['items'])]);

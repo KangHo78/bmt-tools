@@ -174,7 +174,7 @@ class AdminController extends Controller
         return response()->streamDownload(function () use ($excel, $spreadsheet): void {
             $excel->writer($spreadsheet)->save('php://output');
             $spreadsheet->disconnectWorksheets();
-        }, 'template-import-master-aset.xlsx', [
+        }, 'template-import-tools.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
@@ -190,7 +190,7 @@ class AdminController extends Controller
         ]);
         $result = $excel->import($data['import_file']);
 
-        return back()->with('success', "Import selesai: {$result['created']} master aset ditambahkan dan {$result['updated']} diperbarui.");
+        return back()->with('success', "Import selesai: {$result['created']} master aset ditambahkan, {$result['updated']} diperbarui, dan {$result['units']} unit tool dibuat.");
     }
 
     public function updateToolType(Request $request, ToolType $toolType)

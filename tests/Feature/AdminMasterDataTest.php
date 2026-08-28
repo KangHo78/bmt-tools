@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\ChecklistItem;
 use App\Models\Location;
 use App\Models\SsoItem;
+use App\Models\SsoNpb;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Models\User;
@@ -31,6 +32,9 @@ class AdminMasterDataTest extends TestCase
         }
 
         Schema::connection('sso')->dropIfExists('m_item');
+        Schema::connection('sso')->dropIfExists('npb_item');
+        Schema::connection('sso')->dropIfExists('npb');
+        Schema::connection('sso')->dropIfExists('users');
         Schema::connection('sso')->create('m_item', function (Blueprint $table) {
             $table->id();
             $table->string('item_no')->unique();
@@ -56,6 +60,44 @@ class AdminMasterDataTest extends TestCase
             'article_no' => 'ART-01',
             'unit' => 'PCS',
             'specification' => 'Spesifikasi alat uji',
+        ]);
+        Schema::connection('sso')->create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('username');
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_group')->default(false);
+        });
+        Schema::connection('sso')->create('npb', function (Blueprint $table) {
+            $table->id();
+            $table->string('npb__no');
+            $table->unsignedBigInteger('peminta_id');
+            $table->boolean('flag')->default(true);
+        });
+        Schema::connection('sso')->create('npb_item', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('npb_id');
+            $table->unsignedBigInteger('item_id');
+            $table->unsignedInteger('qty');
+        });
+        DB::connection('sso')->table('users')->insert([
+            'id' => 10,
+            'name' => 'Peminta Tools Uji',
+            'username' => 'peminta.tools',
+            'is_active' => true,
+            'is_group' => false,
+        ]);
+        DB::connection('sso')->table('npb')->insert([
+            'id' => 20,
+            'npb__no' => '0475/WO-PO/04/2026',
+            'peminta_id' => 10,
+            'flag' => true,
+        ]);
+        DB::connection('sso')->table('npb_item')->insert([
+            'id' => 30,
+            'npb_id' => 20,
+            'item_id' => 1,
+            'qty' => 2,
         ]);
     }
 
@@ -202,49 +244,41 @@ class AdminMasterDataTest extends TestCase
         $this->assertDatabaseMissing('checklist_items', ['id' => $item->id]);
     }
 
-    public function test_administrator_imports_and_updates_master_assets_from_excel(): void
+    public function test_administrator_imports_complete_tool_codes_and_master_data_from_excel(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $category = Category::create(['name' => 'Perkakas']);
-        $secondCategory = Category::create(['name' => 'Perkakas Khusus']);
-        $location = Location::create(['name' => 'Rak Import', 'type' => 'rak']);
-        $source = SsoItem::tools()->firstOrFail();
+        [$source, $document] = $this->toolSourcePair();
 
-        $firstFile = $this->masterAssetWorkbook([
-            [$source->item_no, $category->name, $location->name, 'Gunakan APD', 'Kondisi fisik | Kelengkapan'],
+        $file = $this->masterAssetWorkbook([
+            [$source->item_no, 2, $source->item_no.'.1', $document->npb__no],
+            [null, null, $source->item_no.'.2'],
         ]);
         $this->actingAs($admin)
-            ->post(route('admin.tool-types.import'), ['import_file' => $firstFile])
+            ->post(route('admin.tool-types.import'), ['import_file' => $file])
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('success', 'Import selesai: 1 master aset ditambahkan dan 0 diperbarui.');
+            ->assertSessionHas('success', 'Import selesai: 1 master aset ditambahkan, 0 diperbarui, dan 2 unit tool dibuat.');
 
         $toolType = ToolType::where('sso_item_id', $source->id)->firstOrFail();
-        $this->assertSame(['Kondisi fisik', 'Kelengkapan'], $toolType->checklist);
-        $this->assertDatabaseHas('checklist_items', ['name' => 'Kelengkapan']);
-
-        $secondFile = $this->masterAssetWorkbook([
-            [$source->item_no, $secondCategory->name, $location->name, 'Aturan diperbarui', 'Kondisi fisik'],
+        $this->assertSame($source->item_name, $toolType->name);
+        $this->assertSame($source->manufacture_pn, $toolType->manufacture_pn);
+        $this->assertDatabaseHas('tool_units', ['tool_type_id' => $toolType->id, 'asset_code' => $source->item_no.'.1']);
+        $this->assertDatabaseHas('tool_units', ['tool_type_id' => $toolType->id, 'asset_code' => $source->item_no.'.2']);
+        $this->assertDatabaseHas('tool_units', [
+            'asset_code' => $source->item_no.'.1',
+            'owner' => $document->requester->name ?: $document->requester->username,
+            'owner_sso_user_id' => $document->requester->id,
+            'source_npb_id' => $document->id,
+            'source_npb_item_id' => $document->items->firstWhere('item_id', $source->id)->id,
+            'source_reference' => $document->npb__no,
         ]);
-        $this->actingAs($admin)
-            ->post(route('admin.tool-types.import'), ['import_file' => $secondFile])
-            ->assertSessionHasNoErrors()
-            ->assertSessionHas('success', 'Import selesai: 0 master aset ditambahkan dan 1 diperbarui.');
-
-        $toolType->refresh();
-        $this->assertSame($secondCategory->id, $toolType->category_id);
-        $this->assertSame('Aturan diperbarui', $toolType->rules_summary);
-        $this->assertSame(['Kondisi fisik'], $toolType->checklist);
     }
 
-    public function test_invalid_excel_row_does_not_partially_import_master_assets(): void
+    public function test_import_rejects_incomplete_tool_codes_without_partial_changes(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
-        $category = Category::create(['name' => 'Perkakas']);
-        $location = Location::create(['name' => 'Rak Import', 'type' => 'rak']);
-        $source = SsoItem::tools()->firstOrFail();
+        [$source, $document] = $this->toolSourcePair();
         $file = $this->masterAssetWorkbook([
-            [$source->item_no, $category->name, $location->name, '', 'Kondisi fisik'],
-            ['ITEM-TIDAK-ADA', $category->name, $location->name, '', 'Kondisi fisik'],
+            [$source->item_no, 2, $source->item_no.'.1', $document->npb__no],
         ]);
 
         $this->actingAs($admin)
@@ -252,14 +286,30 @@ class AdminMasterDataTest extends TestCase
             ->assertSessionHasErrors('import_file');
 
         $this->assertDatabaseMissing('tool_types', ['sso_item_id' => $source->id]);
+        $this->assertDatabaseMissing('tool_units', ['asset_code' => $source->item_no.'.1']);
     }
 
-    /** @param list<array<int, string|null>> $rows */
-    private function masterAssetWorkbook(array $rows): UploadedFile
+    public function test_import_finds_required_columns_in_full_opname_layout(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [$source, $document] = $this->toolSourcePair();
+        $file = $this->masterAssetWorkbook([
+            [1, $source->item_no, $source->item_name, 1, $source->item_no.'.1', $document->npb__no, 'Ruang Tools'],
+        ], ['No', 'Item No', 'Nama Barang', 'QTY', 'No. Tool', 'PO NO', 'Location']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.tool-types.import'), ['import_file' => $file])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('tool_units', ['asset_code' => $source->item_no.'.1']);
+    }
+
+    /** @param list<array<int, int|string|null>> $rows */
+    private function masterAssetWorkbook(array $rows, array $headers = ['ITEM NO', 'QTY', 'NO. TOOL', 'PO NO']): UploadedFile
     {
         $spreadsheet = new Spreadsheet;
         $spreadsheet->getActiveSheet()->fromArray([
-            ['ITEM NO', 'KATEGORI', 'LOKASI UTAMA', 'ATURAN PEMINJAMAN', 'CHECKLIST'],
+            $headers,
             ...$rows,
         ]);
         $path = tempnam(sys_get_temp_dir(), 'master-asset-import-');
@@ -273,5 +323,19 @@ class AdminMasterDataTest extends TestCase
             null,
             true,
         );
+    }
+
+    /** @return array{SsoItem, SsoNpb} */
+    private function toolSourcePair(): array
+    {
+        $document = SsoNpb::query()
+            ->where('flag', 1)
+            ->whereHas('items.item', fn ($query) => $query->tools())
+            ->whereHas('requester', fn ($query) => $query->where('is_active', 1)->where('is_group', 0))
+            ->with(['requester', 'items.item'])
+            ->firstOrFail();
+        $source = $document->items->pluck('item')->first(fn ($item) => $item && $item->item_type === 'Tool' && $item->is_active && $item->flag);
+
+        return [$source, $document];
     }
 }

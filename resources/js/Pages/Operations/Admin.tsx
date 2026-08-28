@@ -636,7 +636,7 @@ function MasterTab({
                         className="btn-secondary"
                     >
                         <FileSpreadsheet size={16} />
-                        Import Excel
+                        Import Tools Excel
                     </button>
                 </div>
                 {toolTypes.map((t: any) => (
@@ -794,7 +794,7 @@ function ImportMasterAssets({ close }: { close: () => void }) {
     const error = form.errors.import_file;
 
     return (
-        <Modal title="Import Master Aset" close={close}>
+        <Modal title="Import Tools" close={close}>
             <div className="overflow-hidden rounded-md border border-line bg-canvas">
                 <div className="grid gap-4 border-b border-line bg-ink p-5 text-white sm:grid-cols-[auto_1fr] sm:items-center">
                     <span className="grid size-12 place-items-center rounded-md border border-amber/50 bg-amber text-ink">
@@ -808,8 +808,8 @@ function ImportMasterAssets({ close }: { close: () => void }) {
                             Isi template, lalu unggah kembali
                         </h3>
                         <p className="mt-1 text-sm leading-relaxed text-white/65">
-                            Item baru ditambahkan dan item yang sudah ada
-                            diperbarui berdasarkan ITEM NO.
+                            Master alat diambil dari Buana Multi dan unit dibuat
+                            berdasarkan QTY serta NO. TOOL.
                         </p>
                     </div>
                 </div>
@@ -868,9 +868,10 @@ function ImportMasterAssets({ close }: { close: () => void }) {
                         <strong className="mb-1 block text-ink">
                             Sebelum mengimpor
                         </strong>
-                        Kategori dan lokasi harus sudah tersedia. Pisahkan
-                        beberapa poin checklist dengan tanda |. Seluruh file
-                        dibatalkan jika ada satu baris yang tidak valid.
+                        Kolom wajib hanya ITEM NO, QTY, NO. TOOL, dan PO NO.
+                        Jumlah kode harus sama dengan QTY; owner diambil dari
+                        user peminta PO. Seluruh import dibatalkan jika ada satu
+                        data yang tidak valid.
                     </div>
                 </div>
             </div>

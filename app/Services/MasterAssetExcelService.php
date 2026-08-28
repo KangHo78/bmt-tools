@@ -2,17 +2,15 @@
 
 namespace App\Services;
 
-use App\Models\Category;
-use App\Models\ChecklistItem;
-use App\Models\Location;
 use App\Models\SsoItem;
+use App\Models\SsoNpb;
 use App\Models\ToolType;
+use App\Models\ToolUnit;
 use App\Support\AuditLogger;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
-use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -21,84 +19,77 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class MasterAssetExcelService
 {
-    private const HEADERS = ['item_no', 'kategori', 'lokasi_utama', 'aturan_peminjaman', 'checklist'];
+    private const REQUIRED_HEADERS = ['item_no', 'qty', 'no_tool', 'po_no'];
 
     public function template(): Spreadsheet
     {
         $spreadsheet = new Spreadsheet;
-        $sheet = $spreadsheet->getActiveSheet()->setTitle('Import Master Aset');
-        $sheet->fromArray([['ITEM NO', 'KATEGORI', 'LOKASI UTAMA', 'ATURAN PEMINJAMAN', 'CHECKLIST']], null, 'A1');
-
-        $sheet->getStyle('A1:E1')->applyFromArray([
+        $sheet = $spreadsheet->getActiveSheet()->setTitle('Import Tools');
+        $sheet->fromArray([['ITEM NO', 'QTY', 'NO. TOOL', 'PO NO']], null, 'A1');
+        $sheet->getStyle('A1:D1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '17211B']],
             'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
         ]);
         $sheet->getRowDimension(1)->setRowHeight(28);
-        foreach (['A' => 18, 'B' => 26, 'C' => 28, 'D' => 44, 'E' => 42] as $column => $width) {
+        foreach (['A' => 18, 'B' => 12, 'C' => 24, 'D' => 30] as $column => $width) {
             $sheet->getColumnDimension($column)->setWidth($width);
         }
-        $sheet->freezePane('A2')->setAutoFilter('A1:E1');
+        $sheet->freezePane('A2')->setAutoFilter('A1:C1');
         $sheet->getStyle('A2:A1001')->getNumberFormat()->setFormatCode('@');
-        $sheet->getStyle('D2:E1001')->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+        $sheet->getStyle('C2:C1001')->getNumberFormat()->setFormatCode('@');
 
-        $reference = $spreadsheet->createSheet()->setTitle('Referensi');
-        $reference->fromArray([['ITEM NO', 'NAMA ITEM', 'KATEGORI', 'LOKASI UTAMA', 'CHECKLIST']], null, 'A1');
         $items = SsoItem::tools()->orderBy('item_no')->get(['item_no', 'item_name']);
-        $categories = Category::orderBy('name')->pluck('name')->values();
-        $locations = Location::orderBy('name')->pluck('name')->values();
-        $checklists = ChecklistItem::orderBy('name')->pluck('name')->values();
-        $rowCount = max($items->count(), $categories->count(), $locations->count(), $checklists->count(), 1);
-        for ($index = 0; $index < $rowCount; $index++) {
-            $rowNumber = $index + 2;
-            if (isset($items[$index])) {
-                $reference->setCellValueExplicit('A'.$rowNumber, (string) $items[$index]->item_no, DataType::TYPE_STRING);
-            }
-            $reference->fromArray([[
-                $items[$index]->item_name ?? null,
-                $categories[$index] ?? null,
-                $locations[$index] ?? null,
-                $checklists[$index] ?? null,
-            ]], null, 'B'.$rowNumber);
+        if ($items->isNotEmpty()) {
+            $example = (string) $items->first()->item_no;
+            $sheet->fromArray([[$example, 2, $example.'.1', 'CONTOH/PO/01/2026'], [null, null, $example.'.2']], null, 'A2');
+            $sheet->setCellValueExplicit('A2', $example, DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('C2', $example.'.1', DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit('C3', $example.'.2', DataType::TYPE_STRING);
         }
-        $reference->getStyle('A1:E1')->applyFromArray([
+
+        $reference = $spreadsheet->createSheet()->setTitle('Referensi Item');
+        $reference->fromArray([['ITEM NO', 'NAMA ITEM']], null, 'A1');
+        foreach ($items as $index => $item) {
+            $row = $index + 2;
+            $reference->setCellValueExplicit('A'.$row, (string) $item->item_no, DataType::TYPE_STRING);
+            $reference->setCellValue('B'.$row, $item->item_name);
+        }
+        $reference->getStyle('A1:B1')->applyFromArray([
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'A96E16']],
         ]);
-        foreach (['A' => 18, 'B' => 42, 'C' => 28, 'D' => 28, 'E' => 42] as $column => $width) {
-            $reference->getColumnDimension($column)->setWidth($width);
-        }
-        $reference->freezePane('A2')->setAutoFilter('A1:E'.($rowCount + 1));
-
-        $this->addListValidation($sheet, 'A2:A1001', "'Referensi'!\$A\$2:\$A\$".max(2, $items->count() + 1));
-        $this->addListValidation($sheet, 'B2:B1001', "'Referensi'!\$C\$2:\$C\$".max(2, $categories->count() + 1));
-        $this->addListValidation($sheet, 'C2:C1001', "'Referensi'!\$D\$2:\$D\$".max(2, $locations->count() + 1));
+        $reference->getColumnDimension('A')->setWidth(18);
+        $reference->getColumnDimension('B')->setWidth(48);
+        $reference->freezePane('A2')->setAutoFilter('A1:B'.max(2, $items->count() + 1));
 
         $instructions = $spreadsheet->createSheet()->setTitle('Petunjuk');
         $instructions->fromArray([
-            ['PETUNJUK IMPORT MASTER ASET'],
-            ['1. Isi satu master aset per baris pada sheet "Import Master Aset".'],
+            ['PETUNJUK IMPORT TOOLS'],
+            ['1. Kolom wajib hanya ITEM NO, QTY, NO. TOOL, dan PO NO. Kolom lain akan diabaikan.'],
             ['2. ITEM NO harus tersedia pada Master Item Buana Multi dan bertipe Tool aktif.'],
-            ['3. KATEGORI dan LOKASI UTAMA harus sama dengan data pada sheet Referensi.'],
-            ['4. Pisahkan beberapa CHECKLIST dengan tanda |. Poin baru akan dibuat otomatis.'],
-            ['5. ITEM NO yang sudah menjadi master aset akan diperbarui.'],
-            ['6. Jangan mengubah nama kolom pada baris pertama. Maksimal 1.000 baris.'],
+            ['3. Isi satu NO. TOOL per baris. Baris kode berikutnya boleh mengosongkan ITEM NO dan QTY.'],
+            ['4. Jumlah NO. TOOL untuk setiap ITEM NO wajib sama persis dengan QTY.'],
+            ['5. NO. TOOL harus unik, belum ada di aplikasi, dan diawali ITEM NO diikuti titik.'],
+            ['6. PO NO harus ditemukan di Buana Multi, memuat ITEM NO terkait, dan memiliki user peminta.'],
+            ['7. Nama alat diambil dari Master Item; owner unit diambil dari user peminta PO.'],
+            ['8. Seluruh import dibatalkan apabila ada satu data yang tidak valid. Maksimal 1.000 baris.'],
         ], null, 'A1');
         $instructions->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB('17211B');
-        $instructions->getColumnDimension('A')->setWidth(110);
-        $instructions->getStyle('A1:A7')->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
+        $instructions->getColumnDimension('A')->setWidth(115);
+        $instructions->getStyle('A1:A9')->getAlignment()->setWrapText(true)->setVertical(Alignment::VERTICAL_TOP);
         $spreadsheet->setActiveSheetIndex(0);
 
         return $spreadsheet;
     }
 
-    /** @return array{created:int, updated:int, rows:int} */
+    /** @return array{created:int, updated:int, units:int, rows:int} */
     public function import(UploadedFile $file): array
     {
         try {
             $spreadsheet = IOFactory::load($file->getRealPath());
         } catch (\Throwable) {
-            throw ValidationException::withMessages(['import_file' => 'File Excel tidak dapat dibaca. Gunakan template .xlsx yang disediakan.']);
+            throw ValidationException::withMessages(['import_file' => 'File Excel tidak dapat dibaca. Gunakan file .xlsx atau .xls yang valid.']);
         }
 
         $sheet = $spreadsheet->getSheet(0);
@@ -108,78 +99,134 @@ class MasterAssetExcelService
             throw ValidationException::withMessages(['import_file' => 'File Excel tidak berisi data.']);
         }
 
-        $headers = array_map(fn ($value) => $this->normaliseHeader((string) $value), array_slice($rows[0], 0, 5));
-        if ($headers !== self::HEADERS) {
-            throw ValidationException::withMessages(['import_file' => 'Format kolom tidak sesuai. Unduh dan gunakan template import terbaru.']);
+        $headers = array_map(fn ($value) => $this->normaliseHeader((string) $value), $rows[0]);
+        $columns = [];
+        foreach (self::REQUIRED_HEADERS as $header) {
+            $index = array_search($header, $headers, true);
+            if ($index === false) {
+                throw ValidationException::withMessages(['import_file' => 'Kolom wajib harus memuat ITEM NO, QTY, NO. TOOL, dan PO NO.']);
+            }
+            $columns[$header] = $index;
         }
 
         $dataRows = array_filter(
             array_slice($rows, 1, null, true),
-            fn ($row) => collect(array_slice($row, 0, 5))->contains(fn ($value) => trim((string) $value) !== '')
+            fn ($row) => collect($columns)->contains(fn ($column) => trim((string) ($row[$column] ?? '')) !== '')
         );
         if ($dataRows === []) {
-            throw ValidationException::withMessages(['import_file' => 'Belum ada baris master aset untuk diimpor.']);
+            throw ValidationException::withMessages(['import_file' => 'Belum ada data tools untuk diimpor.']);
         }
         if (count($dataRows) > 1000) {
             throw ValidationException::withMessages(['import_file' => 'Maksimal 1.000 baris dalam satu kali import.']);
         }
 
-        $categories = $this->uniqueNameMap(Category::all(), 'Kategori');
-        $locations = $this->uniqueNameMap(Location::all(), 'Lokasi');
-        $itemNumbers = collect($dataRows)->pluck(0)->map(fn ($value) => trim((string) $value))->filter()->unique()->values();
-        $sources = SsoItem::tools()->whereIn('item_no', $itemNumbers)->get()->keyBy(fn ($item) => $this->normaliseName($item->item_no));
         $errors = [];
-        $prepared = [];
-        $seen = [];
-
+        $groups = [];
+        $currentKey = null;
         foreach ($dataRows as $offset => $row) {
             $excelRow = $offset + 1;
-            [$itemNo, $categoryName, $locationName, $rules, $checklistText] = array_map(fn ($value) => trim((string) $value), array_pad(array_slice($row, 0, 5), 5, ''));
-            $itemKey = $this->normaliseName($itemNo);
-            $categoryKey = $this->normaliseName($categoryName);
-            $locationKey = $this->normaliseName($locationName);
-            $checklists = collect(explode('|', $checklistText))
-                ->map(fn ($name) => trim($name))
-                ->filter()
-                ->unique(fn ($name) => $this->normaliseName($name))
-                ->values()
-                ->all();
+            $itemNo = trim((string) ($row[$columns['item_no']] ?? ''));
+            $quantity = trim((string) ($row[$columns['qty']] ?? ''));
+            $toolCode = trim((string) ($row[$columns['no_tool']] ?? ''));
+            $poNumber = trim((string) ($row[$columns['po_no']] ?? ''));
 
-            $rowErrors = [];
-            if ($itemNo === '') {
-                $rowErrors[] = 'ITEM NO wajib diisi';
-            } elseif (isset($seen[$itemKey])) {
-                $rowErrors[] = "ITEM NO duplikat dengan baris {$seen[$itemKey]}";
-            } elseif (! isset($sources[$itemKey])) {
-                $rowErrors[] = 'ITEM NO tidak ditemukan pada Master Item Tool aktif';
-            }
-            if ($categoryName === '' || ! isset($categories[$categoryKey])) {
-                $rowErrors[] = 'KATEGORI tidak ditemukan';
-            }
-            if ($locationName === '' || ! isset($locations[$locationKey])) {
-                $rowErrors[] = 'LOKASI UTAMA tidak ditemukan';
-            }
-            if ($checklists === []) {
-                $rowErrors[] = 'CHECKLIST wajib diisi dan dipisahkan dengan tanda |';
-            } elseif (collect($checklists)->contains(fn ($name) => mb_strlen($name) > 255)) {
-                $rowErrors[] = 'nama CHECKLIST maksimal 255 karakter';
+            if ($itemNo !== '') {
+                $itemKey = $this->normaliseName($itemNo);
+                $groupKey = $itemKey.'|'.$this->normaliseName($poNumber);
+                if (isset($groups[$groupKey])) {
+                    $errors[] = "Baris {$excelRow}: kombinasi ITEM NO {$itemNo} dan PO NO {$poNumber} sudah didefinisikan pada baris {$groups[$groupKey]['row']}.";
+                    $currentKey = null;
+                } else {
+                    $groups[$groupKey] = ['row' => $excelRow, 'item_no' => $itemNo, 'item_key' => $itemKey, 'po_no' => $poNumber, 'quantity_raw' => $quantity, 'quantity' => null, 'codes' => []];
+                    $currentKey = $groupKey;
+                }
+            } elseif ($quantity !== '') {
+                $errors[] = "Baris {$excelRow}: QTY tidak boleh diisi tanpa ITEM NO.";
             }
 
-            if ($rowErrors !== []) {
-                $errors[] = "Baris {$excelRow}: ".implode('; ', $rowErrors).'.';
-
-                continue;
+            if ($toolCode !== '') {
+                if ($currentKey === null) {
+                    $errors[] = "Baris {$excelRow}: NO. TOOL {$toolCode} tidak memiliki ITEM NO.";
+                } else {
+                    $groups[$currentKey]['codes'][] = ['value' => $toolCode, 'row' => $excelRow];
+                }
             }
-            $seen[$itemKey] = $excelRow;
-            $prepared[] = [
-                'source' => $sources[$itemKey],
-                'category' => $categories[$categoryKey],
-                'location' => $locations[$locationKey],
-                'rules' => $rules,
-                'checklists' => $checklists,
-            ];
         }
 
+        $itemNumbers = collect($groups)->pluck('item_no')->unique()->values();
+        $sources = SsoItem::tools()->whereIn('item_no', $itemNumbers)->get()
+            ->keyBy(fn ($item) => $this->normaliseName((string) $item->item_no));
+        $poNumbers = collect($groups)->pluck('po_no')->filter()->unique()->values();
+        $documents = SsoNpb::query()
+            ->where('flag', 1)
+            ->whereIn('npb__no', $poNumbers)
+            ->with(['requester:id,name,username,is_active,is_group', 'items:id,npb_id,item_id'])
+            ->get()
+            ->groupBy(fn ($document) => $this->normaliseName((string) $document->npb__no));
+        $seenCodes = [];
+        foreach ($groups as &$group) {
+            $itemKey = $group['item_key'];
+            $quantity = filter_var($group['quantity_raw'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($quantity === false) {
+                $errors[] = "Baris {$group['row']}: QTY untuk ITEM NO {$group['item_no']} wajib berupa bilangan bulat minimal 1.";
+            } else {
+                $group['quantity'] = $quantity;
+                if (count($group['codes']) !== $quantity) {
+                    $errors[] = "Baris {$group['row']}: ITEM NO {$group['item_no']} memiliki QTY {$quantity}, tetapi NO. TOOL yang terisi ".count($group['codes']).'.';
+                }
+            }
+            if (! isset($sources[$itemKey])) {
+                $errors[] = "Baris {$group['row']}: ITEM NO {$group['item_no']} tidak ditemukan pada Master Item Tool aktif.";
+            }
+            if ($group['po_no'] === '') {
+                $errors[] = "Baris {$group['row']}: PO NO wajib diisi.";
+            } else {
+                $documentMatches = $documents[$this->normaliseName($group['po_no'])] ?? collect();
+                if ($documentMatches->count() !== 1) {
+                    $errors[] = $documentMatches->isEmpty()
+                        ? "Baris {$group['row']}: PO NO {$group['po_no']} tidak ditemukan pada Buana Multi."
+                        : "Baris {$group['row']}: PO NO {$group['po_no']} tidak unik pada Buana Multi.";
+                } else {
+                    $document = $documentMatches->first();
+                    $requesterName = trim((string) ($document->requester?->name ?: $document->requester?->username));
+                    if (! $document->requester || ! $document->requester->is_active || $document->requester->is_group || $requesterName === '') {
+                        $errors[] = "Baris {$group['row']}: PO NO {$group['po_no']} tidak memiliki user peminta aktif yang valid.";
+                    }
+                    if (isset($sources[$itemKey])) {
+                        $sourceItem = $document->items->firstWhere('item_id', $sources[$itemKey]->id);
+                        if (! $sourceItem) {
+                            $errors[] = "Baris {$group['row']}: ITEM NO {$group['item_no']} tidak tercantum pada PO NO {$group['po_no']}.";
+                        } else {
+                            $group['source_npb_item_id'] = $sourceItem->id;
+                        }
+                    }
+                    $group['document_key'] = $this->normaliseName($group['po_no']);
+                }
+            }
+            foreach ($group['codes'] as $codeRow) {
+                $code = $codeRow['value'];
+                $codeKey = $this->normaliseName($code);
+                if (mb_strlen($code) > 255) {
+                    $errors[] = "Baris {$codeRow['row']}: NO. TOOL maksimal 255 karakter.";
+                }
+                if (! str_starts_with($codeKey, $itemKey.'.')) {
+                    $errors[] = "Baris {$codeRow['row']}: NO. TOOL {$code} harus diawali {$group['item_no']}.";
+                }
+                if (isset($seenCodes[$codeKey])) {
+                    $errors[] = "Baris {$codeRow['row']}: NO. TOOL {$code} duplikat dengan baris {$seenCodes[$codeKey]}.";
+                } else {
+                    $seenCodes[$codeKey] = $codeRow['row'];
+                }
+            }
+        }
+        unset($group);
+
+        $allCodes = collect($groups)->flatMap(fn ($group) => collect($group['codes'])->pluck('value'))->values();
+        foreach (ToolUnit::query()->whereIn('asset_code', $allCodes)->pluck('asset_code') as $code) {
+            $errors[] = "NO. TOOL {$code} sudah terdaftar di aplikasi.";
+        }
+
+        $errors = array_values(array_unique($errors));
         if ($errors !== []) {
             $visible = array_slice($errors, 0, 12);
             if (count($errors) > 12) {
@@ -188,12 +235,14 @@ class MasterAssetExcelService
             throw ValidationException::withMessages(['import_file' => implode("\n", $visible)]);
         }
 
-        return DB::transaction(function () use ($prepared) {
+        return DB::transaction(function () use ($groups, $sources, $documents) {
             $created = 0;
             $updated = 0;
-            foreach ($prepared as $row) {
-                $source = $row['source'];
-                $checklistIds = collect($row['checklists'])->map(fn ($name) => ChecklistItem::firstOrCreate(['name' => $name])->id)->all();
+            $unitCount = 0;
+            foreach ($groups as $group) {
+                $source = $sources[$group['item_key']];
+                $document = $documents[$group['document_key']]->first();
+                $owner = trim((string) ($document->requester->name ?: $document->requester->username));
                 $data = [
                     'sso_item_id' => $source->id,
                     'code' => $source->item_no,
@@ -205,38 +254,46 @@ class MasterAssetExcelService
                     'size' => $source->article_no,
                     'description' => $source->specification,
                     'image_url' => $source->image,
-                    'category_id' => $row['category']->id,
-                    'primary_location_id' => $row['location']->id,
-                    'rules_summary' => $row['rules'] ?: null,
-                    'checklist' => $row['checklists'],
                 ];
-                $toolType = ToolType::query()->where('sso_item_id', $source->id)->orWhere('code', $source->item_no)->first();
+                $toolType = ToolType::query()->where('sso_item_id', $source->id)
+                    ->orWhere('code', $source->item_no)->lockForUpdate()->first();
                 $before = $toolType?->only(array_keys($data));
                 if ($toolType) {
                     $toolType->update($data);
                     $updated++;
                 } else {
-                    $toolType = ToolType::create($data);
+                    $toolType = ToolType::create([...$data, 'checklist' => []]);
                     $created++;
                 }
-                $toolType->checklistItems()->sync(collect($checklistIds)->mapWithKeys(fn ($id, $position) => [$id => ['position' => $position]]));
-                AuditLogger::record($before ? 'tool_type.import_updated' : 'tool_type.import_created', $toolType, $before ? ['before' => $before, 'after' => $data] : []);
+                foreach ($group['codes'] as $codeRow) {
+                    ToolUnit::create([
+                        'tool_type_id' => $toolType->id,
+                        'asset_code' => $codeRow['value'],
+                        'status' => 'tersedia',
+                        'condition' => 'baik',
+                        'location_id' => $toolType->primary_location_id,
+                        'owner' => $owner,
+                        'owner_sso_user_id' => $document->requester->id,
+                        'source_npb_id' => $document->id,
+                        'source_npb_item_id' => $group['source_npb_item_id'],
+                        'source_reference' => $group['po_no'],
+                    ]);
+                    $unitCount++;
+                }
+                AuditLogger::record(
+                    $before ? 'tool_type.import_updated' : 'tool_type.import_created',
+                    $toolType,
+                    ['before' => $before, 'after' => $data, 'unit_count' => count($group['codes'])],
+                );
             }
 
-            return ['created' => $created, 'updated' => $updated, 'rows' => count($prepared)];
+            return ['created' => $created, 'updated' => $updated, 'units' => $unitCount, 'rows' => count($groups)];
         });
     }
 
     public function writer(Spreadsheet $spreadsheet): Xlsx
     {
         return new Xlsx($spreadsheet);
-    }
-
-    private function addListValidation($sheet, string $range, string $formula): void
-    {
-        $validation = new DataValidation;
-        $validation->setType(DataValidation::TYPE_LIST)->setErrorStyle(DataValidation::STYLE_STOP)->setAllowBlank(false)->setShowDropDown(true)->setShowErrorMessage(true)->setErrorTitle('Pilihan tidak valid')->setError('Pilih nilai dari daftar referensi.')->setFormula1($formula);
-        $sheet->setDataValidation($range, $validation);
     }
 
     private function normaliseHeader(string $value): string
@@ -249,20 +306,5 @@ class MasterAssetExcelService
     private function normaliseName(string $value): string
     {
         return mb_strtolower(trim(preg_replace('/\s+/', ' ', $value)));
-    }
-
-    /** @return array<string, mixed> */
-    private function uniqueNameMap($models, string $label): array
-    {
-        $map = [];
-        foreach ($models as $model) {
-            $key = $this->normaliseName($model->name);
-            if (isset($map[$key])) {
-                throw ValidationException::withMessages(['import_file' => "{$label} bernama '{$model->name}' tidak unik. Rapikan master data sebelum import."]);
-            }
-            $map[$key] = $model;
-        }
-
-        return $map;
     }
 }
