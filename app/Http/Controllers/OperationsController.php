@@ -17,7 +17,7 @@ class OperationsController extends Controller
 {
     public function approvals()
     {
-        return Inertia::render('Operations/Approvals', ['loans' => Loan::with(['borrower:id,name,institution', 'items.toolType:id,name,code'])->where('status', 'menunggu_approval')->latest()->get(), 'extensions' => LoanExtension::with(['loan.borrower:id,name,institution', 'requester:id,name'])->where('status', 'menunggu_approval')->latest()->get()]);
+        return Inertia::render('Operations/Approvals', ['loans' => Loan::with(['borrower:id,name,institution', 'items.toolType:id,name,code'])->where('status', 'menunggu_approval')->whereHas('approvals', fn ($query) => $query->where('type', 'logistik')->where('status', 'menunggu'))->latest()->get(), 'extensions' => LoanExtension::with(['loan.borrower:id,name,institution', 'requester:id,name'])->where('status', 'menunggu_approval')->latest()->get()]);
     }
 
     public function returns()

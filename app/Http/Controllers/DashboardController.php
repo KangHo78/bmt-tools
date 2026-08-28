@@ -24,7 +24,7 @@ class DashboardController extends Controller
             'metrics' => [
                 'available_units' => ToolUnit::where('status', 'tersedia')->count(),
                 'active_loans' => Loan::whereIn('status', ['berjalan', 'terlambat', 'menunggu_inspeksi'])->count(),
-                'pending_approvals' => Loan::where('status', 'menunggu_approval')->count(),
+                'pending_approvals' => Loan::where('status', 'menunggu_approval')->whereHas('approvals', fn ($query) => $query->where('type', 'logistik')->where('status', 'menunggu'))->count(),
                 'late_loans' => Loan::where('status', 'terlambat')->count(),
                 'maintenance_due' => MaintenanceOrder::whereIn('status', ['berjalan', 'terlambat'])->count(),
                 'open_cases' => AssetCase::where('stage', '!=', 'selesai')->count(),

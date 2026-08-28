@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Loan;
 use App\Models\PhysicalToken;
 use App\Models\ToolType;
-use App\Models\ToolUnit;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -43,7 +42,9 @@ class ToolsAssetWorkflowTest extends TestCase
 
         $loan = Loan::latest('id')->firstOrFail();
         $response->assertRedirect(route('loans.show', $loan));
-        $this->assertSame('disetujui', $loan->status);
+        $this->assertSame('menunggu_approval', $loan->status);
+        $this->assertDatabaseHas('loan_approvals', ['loan_id' => $loan->id, 'type' => 'owner', 'status' => 'menunggu']);
+        $this->assertDatabaseHas('loan_approvals', ['loan_id' => $loan->id, 'type' => 'logistik', 'status' => 'tertunda']);
         $this->assertSame(1, $loan->tokens_used);
         $this->assertTrue($loan->due_date->isFriday());
         $this->assertSame($before + 1, $user->fresh()->token_used);
@@ -93,9 +94,9 @@ class ToolsAssetWorkflowTest extends TestCase
         $loan = Loan::latest('id')->firstOrFail();
         $response->assertRedirect(route('loans.show', $loan));
         $this->assertSame($borrower->id, $loan->user_id);
-        $this->assertSame('disetujui', $loan->status);
-        $this->assertSame($staff->id, $loan->approved_by_id);
-        $this->assertNotNull($loan->approved_at);
+        $this->assertSame('menunggu_approval', $loan->status);
+        $this->assertNull($loan->approved_by_id);
+        $this->assertNull($loan->approved_at);
         $this->assertSame($borrowerTokens + 1, $borrower->fresh()->token_used);
         $this->assertSame($staffTokens, $staff->fresh()->token_used);
         $this->assertDatabaseHas('notifications', [
@@ -212,7 +213,11 @@ class ToolsAssetWorkflowTest extends TestCase
 
         $loan = Loan::latest('id')->firstOrFail();
         $this->assertSame('menunggu_approval', $loan->status);
+        $owner = User::where('sso_user_id', $loan->items()->firstOrFail()->unit->owner_sso_user_id)->firstOrFail();
         $head = User::where('role', 'kepala_logistik')->firstOrFail();
+        $this->actingAs($head)->post(route('loans.approve', $loan))->assertForbidden();
+        $this->actingAs($owner)->post(route('loans.approve', $loan))->assertRedirect();
+        $this->assertSame('menunggu_approval', $loan->fresh()->status);
         $this->actingAs($head)->post(route('loans.approve', $loan))->assertRedirect();
         $this->assertSame('disetujui', $loan->fresh()->status);
         $this->assertSame($head->id, $loan->fresh()->approved_by_id);
@@ -238,6 +243,8 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->actingAs($head)->get(route('approvals.index'))->assertForbidden();
         $this->actingAs($head)->post(route('loans.approve', $loan))->assertForbidden();
 
+        $owner = User::where('sso_user_id', $loan->items()->firstOrFail()->unit->owner_sso_user_id)->firstOrFail();
+        $this->actingAs($owner)->post(route('loans.approve', $loan))->assertRedirect();
         $this->actingAs($admin)->get(route('approvals.index'))->assertOk();
         $this->actingAs($admin)->post(route('loans.approve', $loan))->assertRedirect();
         $this->assertSame($admin->id, $loan->fresh()->approved_by_id);
@@ -269,11 +276,13 @@ class ToolsAssetWorkflowTest extends TestCase
         $head = User::where('role', 'kepala_logistik')->firstOrFail();
         $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
         $borrower = $loan->user;
+        $owner = User::where('sso_user_id', $loan->items()->firstOrFail()->unit->owner_sso_user_id)->firstOrFail();
+        $this->actingAs($owner)->post(route('loans.approve', $loan));
         $this->actingAs($head)->post(route('loans.approve', $loan));
         $loan->load('items');
         $codes = [];
         foreach ($loan->items as $item) {
-            $codes[$item->id] = ToolUnit::where('tool_type_id', $item->tool_type_id)->where('status', 'tersedia')->value('asset_code');
+            $codes[$item->id] = $item->unit->asset_code;
         }
 
         $this->actingAs($staff)->post(route('loans.handover', $loan), [

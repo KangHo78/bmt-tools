@@ -77,6 +77,14 @@ export interface Loan {
     returned_at?: string;
     borrower: Borrower;
     approver?: User;
+    approvals?: Array<{
+        id: number;
+        type: "owner" | "logistik";
+        status: string;
+        approver?: Pick<User, "id" | "name">;
+        required_approver?: Pick<User, "id" | "name">;
+        rejection_reason?: string;
+    }>;
     items: LoanItem[];
     extensions?: any[];
 }

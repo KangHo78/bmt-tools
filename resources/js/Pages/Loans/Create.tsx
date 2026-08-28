@@ -329,14 +329,14 @@ export default function Create({
                             onClick={() => setUsage("dalam_area")}
                             icon={MapPin}
                             title="Dalam Workshop"
-                            desc="Tenggat otomatis Jumat terdekat. Tidak memerlukan surat."
+                            desc="Tenggat Jumat terdekat; memerlukan approval owner dan Kepala Logistik."
                         />
                         <Usage
                             active={usage === "luar_area"}
                             onClick={() => setUsage("luar_area")}
                             icon={FileText}
                             title="Luar Workshop"
-                            desc="Memerlukan periode, surat permohonan, dan approval."
+                            desc="Memerlukan periode, surat, approval owner, dan Kepala Logistik."
                         />
                     </div>
                     <Actions back={() => setStep(1)} next={() => setStep(3)} />

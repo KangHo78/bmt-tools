@@ -23,12 +23,12 @@ export default function Approvals({
             <PageHeader
                 eyebrow="Decision queue"
                 title="Approval Logistik"
-                description="Tinjau pinjaman luar area dan permohonan perpanjangan periode."
+                description="Approval final setelah seluruh owner item menyetujui permohonan."
             />
             <section>
                 <div className="mb-3 flex items-center justify-between">
                     <h2 className="font-display text-2xl font-bold">
-                        Pinjaman Luar Area
+                        Persetujuan Final Peminjaman
                     </h2>
                     <span className="font-num text-sm text-muted">
                         {loans.length} antrean

@@ -48,7 +48,12 @@ return new class extends Migration
                 'updated_at' => now(),
             ]);
         });
-        DB::statement('UPDATE loans l JOIN borrowers b ON b.user_id = l.user_id SET l.borrower_id = b.id');
+        $borrowerIds = DB::table('borrowers')->whereNotNull('user_id')->pluck('id', 'user_id');
+        DB::table('loans')->whereNotNull('user_id')->get(['id', 'user_id'])->each(function ($loan) use ($borrowerIds): void {
+            if (isset($borrowerIds[$loan->user_id])) {
+                DB::table('loans')->where('id', $loan->id)->update(['borrower_id' => $borrowerIds[$loan->user_id]]);
+            }
+        });
         Schema::table('loans', fn (Blueprint $table) => $table->unsignedBigInteger('user_id')->nullable()->change());
     }
 

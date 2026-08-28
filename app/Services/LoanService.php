@@ -6,7 +6,9 @@ use App\Models\ActivityLog;
 use App\Models\AssetCase;
 use App\Models\Borrower;
 use App\Models\Loan;
+use App\Models\LoanApproval;
 use App\Models\PhysicalToken;
+use App\Models\SsoUser;
 use App\Models\SystemNotification;
 use App\Models\ToolUnit;
 use App\Models\User;
@@ -18,7 +20,10 @@ use Illuminate\Validation\ValidationException;
 
 class LoanService
 {
-    public function __construct(private ApprovalConfiguration $approvalConfiguration) {}
+    public function __construct(
+        private ApprovalConfiguration $approvalConfiguration,
+        private SsoUserSynchronizer $ssoSynchronizer,
+    ) {}
 
     public function create(Borrower $borrower, array $data, ?UploadedFile $letter, User $createdBy, bool $allowTokenRegistration = false): Loan
     {
@@ -33,14 +38,18 @@ class LoanService
             if ($tokenCodes->unique()->count() !== $needed) {
                 throw ValidationException::withMessages(['token_codes' => 'Satu token fisik tidak dapat digunakan untuk dua alat.']);
             }
+            $reservedUnits = [];
             foreach ($typeIds as $typeId) {
-                if (! ToolUnit::query()->where('tool_type_id', $typeId)->where('status', 'tersedia')->exists()) {
-                    throw ValidationException::withMessages(['tool_type_ids' => 'Salah satu jenis alat tidak memiliki unit tersedia.']);
+                $unit = ToolUnit::query()->where('tool_type_id', $typeId)
+                    ->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')
+                    ->orderBy('id')->lockForUpdate()->first();
+                if (! $unit) {
+                    throw ValidationException::withMessages(['tool_type_ids' => 'Salah satu jenis alat tidak memiliki unit tersedia dengan owner dari Buana Multi.']);
                 }
+                $reservedUnits[$typeId] = $unit;
             }
 
             $outside = $data['usage_type'] === 'luar_area';
-            $operatorApproved = ! $outside && $createdBy->hasRole('petugas', 'admin');
             $due = $outside ? Carbon::parse($data['due_date'])->endOfDay() : $this->nearestFriday(Carbon::parse($data['start_date']));
             $loan = Loan::create([
                 'trx_no' => $this->nextNumber(),
@@ -52,9 +61,9 @@ class LoanService
                 'location_text' => $data['location_text'],
                 'start_date' => Carbon::parse($data['start_date']),
                 'due_date' => $due,
-                'status' => $outside ? 'menunggu_approval' : 'disetujui',
-                'approved_by_id' => $operatorApproved ? $createdBy->id : null,
-                'approved_at' => $operatorApproved ? now() : null,
+                'status' => 'menunggu_approval',
+                'approved_by_id' => null,
+                'approved_at' => null,
                 'letter_url' => $letter?->store('loan-letters', 'public'),
                 'tokens_used' => $needed,
             ]);
@@ -73,9 +82,21 @@ class LoanService
                 if ($token->status !== 'dipegang_peminjam') {
                     throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} sedang digunakan atau tidak aktif."]);
                 }
-                $loan->items()->create(['tool_type_id' => $typeId, 'physical_token_id' => $token->id]);
+                $unit = $reservedUnits[$typeId];
+                $loan->items()->create(['tool_type_id' => $typeId, 'physical_token_id' => $token->id, 'unit_id' => $unit->id]);
                 $token->update(['status' => 'direservasi']);
+                $unit->update(['status' => 'direservasi']);
             }
+            $ownerSsoIds = collect($reservedUnits)->pluck('owner_sso_user_id')->unique()->values();
+            $ownerUsers = $this->ownerUsers($ownerSsoIds);
+            if ($ownerUsers->count() !== $ownerSsoIds->count()) {
+                throw ValidationException::withMessages(['tool_type_ids' => 'Salah satu owner item tidak lagi aktif atau tidak ditemukan di Buana Multi.']);
+            }
+            $ownerUsersBySsoId = $ownerUsers->keyBy('sso_user_id');
+            foreach ($ownerSsoIds as $ownerSsoId) {
+                $loan->approvals()->create(['type' => 'owner', 'required_sso_user_id' => $ownerSsoId, 'required_user_id' => $ownerUsersBySsoId[$ownerSsoId]->id, 'status' => 'menunggu']);
+            }
+            $loan->approvals()->create(['type' => 'logistik', 'status' => 'tertunda']);
             $borrower->user?->increment('token_used', $needed);
             $this->log($createdBy, 'loan.created', $loan, [
                 'tokens' => $needed,
@@ -87,48 +108,92 @@ class LoanService
                 $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$createdBy->name} membuat {$loan->trx_no} untuk Anda.");
             }
 
-            if ($outside) {
-                foreach ($this->approvalConfiguration->approvers() as $approver) {
-                    SystemNotification::create([
-                        'user_id' => $approver->id,
-                        'category' => 'perlu_tindakan',
-                        'title' => "Permohonan {$loan->trx_no} menunggu persetujuan",
-                        'description' => "{$borrower->name} · {$loan->purpose}",
-                        'object_type' => 'loan',
-                        'object_id' => $loan->id,
-                        'href' => "/peminjaman/{$loan->id}",
-                    ]);
-                }
+            foreach ($ownerUsers as $owner) {
+                $this->notifyApprover($loan, $owner, 'Persetujuan owner diperlukan', "{$borrower->name} mengajukan peminjaman aset milik Anda.");
             }
 
             return $loan;
         });
     }
 
-    public function approve(Loan $loan, User $approver, ?string $dueDate = null): void
+    public function approve(Loan $loan, User $approver, ?string $dueDate = null): string
     {
-        abort_unless($loan->status === 'menunggu_approval', 422, 'Permohonan tidak lagi menunggu persetujuan.');
-        $loan->update(['status' => 'disetujui', 'approved_by_id' => $approver->id, 'approved_at' => now(), 'due_date' => $dueDate ? Carbon::parse($dueDate)->endOfDay() : $loan->due_date]);
-        $this->notify($loan, 'Permohonan disetujui', "{$loan->trx_no} siap diproses untuk serah terima.");
-        $this->log($approver, 'loan.approved', $loan);
+        return DB::transaction(function () use ($loan, $approver, $dueDate) {
+            $loan = Loan::query()->with('approvals')->lockForUpdate()->findOrFail($loan->id);
+            abort_unless($loan->status === 'menunggu_approval', 422, 'Permohonan tidak lagi menunggu persetujuan.');
+            $approval = $this->actionableApproval($loan, $approver);
+            abort_unless($approval, 403, 'Anda tidak memiliki tahap approval yang aktif untuk permohonan ini.');
+            $approval->update(['status' => 'disetujui', 'approved_by_id' => $approver->id, 'approved_at' => now()]);
+
+            if ($approval->type === 'owner') {
+                $this->log($approver, 'loan.owner_approved', $loan);
+                if (! $loan->approvals()->where('type', 'owner')->where('status', 'menunggu')->exists()) {
+                    $loan->approvals()->where('type', 'logistik')->where('status', 'tertunda')->update(['status' => 'menunggu']);
+                    foreach ($this->approvalConfiguration->approvers() as $logisticsApprover) {
+                        $this->notifyApprover($loan, $logisticsApprover, 'Persetujuan Kepala Logistik diperlukan', "Seluruh owner telah menyetujui {$loan->trx_no}.");
+                    }
+                }
+
+                return 'owner';
+            }
+
+            $loan->update(['status' => 'disetujui', 'approved_by_id' => $approver->id, 'approved_at' => now(), 'due_date' => $dueDate ? Carbon::parse($dueDate)->endOfDay() : $loan->due_date]);
+            $this->notify($loan, 'Permohonan disetujui', "{$loan->trx_no} telah disetujui owner dan Kepala Logistik, serta siap diproses untuk serah terima.");
+            $this->log($approver, 'loan.logistics_approved', $loan);
+
+            return 'logistik';
+        });
     }
 
     public function reject(Loan $loan, User $approver, string $reason): void
     {
         DB::transaction(function () use ($loan, $approver, $reason) {
+            $loan = Loan::query()->with('approvals')->lockForUpdate()->findOrFail($loan->id);
             abort_unless($loan->status === 'menunggu_approval', 422, 'Permohonan tidak lagi menunggu persetujuan.');
+            $approval = $this->actionableApproval($loan, $approver);
+            abort_unless($approval, 403, 'Anda tidak memiliki tahap approval yang aktif untuk permohonan ini.');
+            $approval->update(['status' => 'ditolak', 'approved_by_id' => $approver->id, 'approved_at' => now(), 'rejection_reason' => $reason]);
             $loan->update(['status' => 'ditolak', 'approved_by_id' => $approver->id, 'rejection_reason' => $reason]);
             $this->releaseTokens($loan);
             $this->notify($loan, 'Permohonan ditolak', "{$loan->trx_no} ditolak. Alasan: {$reason}");
-            $this->log($approver, 'loan.rejected', $loan, ['reason' => $reason]);
+            $this->log($approver, 'loan.rejected', $loan, ['reason' => $reason, 'approval_type' => $approval->type]);
         });
+    }
+
+    public function canReviewApproval(Loan $loan, User $user): bool
+    {
+        if ($this->approvalConfiguration->isApprover($user)) {
+            return true;
+        }
+
+        return filled($user->sso_user_id)
+            && $loan->approvals()->where('type', 'owner')->where('required_sso_user_id', $user->sso_user_id)->exists();
+    }
+
+    public function actionableApproval(Loan $loan, User $user): ?LoanApproval
+    {
+        $loan->loadMissing('approvals');
+        if (filled($user->sso_user_id)) {
+            $ownerApproval = $loan->approvals->first(fn (LoanApproval $approval) => $approval->type === 'owner'
+                && $approval->status === 'menunggu'
+                && (int) $approval->required_sso_user_id === (int) $user->sso_user_id);
+            if ($ownerApproval) {
+                return $ownerApproval;
+            }
+        }
+        $hasPendingOwner = $loan->approvals->contains(fn (LoanApproval $approval) => $approval->type === 'owner' && $approval->status === 'menunggu');
+        if (! $hasPendingOwner && $this->approvalConfiguration->isApprover($user)) {
+            return $loan->approvals->first(fn (LoanApproval $approval) => $approval->type === 'logistik' && $approval->status === 'menunggu');
+        }
+
+        return null;
     }
 
     public function handover(Loan $loan, User $staff, array $unitCodes, ?UploadedFile $photo): void
     {
         DB::transaction(function () use ($loan, $staff, $unitCodes, $photo) {
             abort_unless(in_array($loan->status, ['disetujui', 'menunggu_serah_terima'], true), 422, 'Peminjaman belum dapat diserahkan.');
-            $loan->load(['items.toolType', 'items.physicalToken']);
+            $loan->load(['items.toolType', 'items.physicalToken', 'items.unit']);
             if (count($unitCodes) !== $loan->items->count()) {
                 throw ValidationException::withMessages(['unit_codes' => 'Semua item harus memiliki kode unit.']);
             }
@@ -137,9 +202,9 @@ class LoanService
             }
             foreach ($loan->items as $item) {
                 $code = $unitCodes[$item->id] ?? null;
-                $unit = ToolUnit::query()->lockForUpdate()->where('asset_code', $code)->first();
-                if (! $unit || $unit->tool_type_id !== $item->tool_type_id || $unit->status !== 'tersedia') {
-                    throw ValidationException::withMessages(["unit_codes.{$item->id}" => "Unit {$code} tidak sesuai atau tidak tersedia."]);
+                $unit = ToolUnit::query()->lockForUpdate()->find($item->unit_id);
+                if (! $unit || $unit->asset_code !== $code || $unit->tool_type_id !== $item->tool_type_id || $unit->status !== 'direservasi') {
+                    throw ValidationException::withMessages(["unit_codes.{$item->id}" => "Unit {$code} bukan unit yang direservasi untuk permohonan ini."]);
                 }
                 $item->update(['unit_id' => $unit->id, 'condition_out' => $unit->condition, 'checklist' => array_fill_keys($item->toolType->checklist ?? [], true)]);
                 $unit->update(['status' => 'dipinjam']);
@@ -189,9 +254,12 @@ class LoanService
 
     private function releaseTokens(Loan $loan): void
     {
-        $loan->loadMissing('items.physicalToken');
+        $loan->loadMissing(['items.physicalToken', 'items.unit']);
         foreach ($loan->items as $item) {
             $item->physicalToken?->update(['status' => 'dipegang_peminjam']);
+            if ($item->unit?->status === 'direservasi') {
+                $item->unit->update(['status' => 'tersedia']);
+            }
         }
         if ($loan->user_id && ($user = User::query()->lockForUpdate()->find($loan->user_id))) {
             $user->update(['token_used' => max(0, $user->token_used - $loan->tokens_used)]);
@@ -209,6 +277,26 @@ class LoanService
             return;
         }
         SystemNotification::create(['user_id' => $loan->user_id, 'category' => 'informasi', 'title' => $title, 'description' => $description, 'object_type' => 'loan', 'object_id' => $loan->id, 'href' => "/peminjaman/{$loan->id}"]);
+    }
+
+    private function notifyApprover(Loan $loan, User $approver, string $title, string $description): void
+    {
+        SystemNotification::create(['user_id' => $approver->id, 'category' => 'perlu_tindakan', 'title' => $title, 'description' => $description, 'object_type' => 'loan', 'object_id' => $loan->id, 'href' => "/peminjaman/{$loan->id}"]);
+    }
+
+    private function ownerUsers($ownerSsoIds)
+    {
+        $users = User::query()->whereIn('sso_user_id', $ownerSsoIds)->get()->keyBy('sso_user_id');
+        if (! config('sso.enabled')) {
+            return $users->values();
+        }
+        $missingIds = $ownerSsoIds->reject(fn ($id) => $users->has($id));
+        foreach (SsoUser::query()->whereIn('id', $missingIds)->where('is_active', 1)->where('is_group', 0)->get() as $ssoUser) {
+            $user = $this->ssoSynchronizer->synchronize($ssoUser, $ssoUser->managementRole());
+            $users->put($ssoUser->id, $user);
+        }
+
+        return $users->values();
     }
 
     private function log(User $user, string $action, Loan $loan, array $properties = []): void

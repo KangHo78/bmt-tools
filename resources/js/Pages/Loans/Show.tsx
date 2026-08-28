@@ -18,13 +18,20 @@ import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
 import { formatDate, formatDateTime } from "@/lib/ui";
 import type { Loan, PageProps } from "@/types/tams";
 
-export default function Show({ loan }: { loan: Loan }) {
-    const { user, canApprove: isApprover } = usePage<PageProps>().props.auth;
+export default function Show({
+    loan,
+    canActOnApproval = false,
+}: {
+    loan: Loan;
+    canActOnApproval?: boolean;
+}) {
+    const { user } = usePage<PageProps>().props.auth;
     const [reject, setReject] = useState(false);
     const [extend, setExtend] = useState(false);
     const rejectForm = useForm({ reason: "" });
     const extendForm = useForm({ new_due_date: "", reason: "" });
-    const canApprove = isApprover && loan.status === "menunggu_approval";
+    const canApprove =
+        canActOnApproval && loan.status === "menunggu_approval";
     const canOperate = ["petugas", "admin"].includes(user.role);
     const active = ["berjalan", "terlambat", "menunggu_inspeksi"].includes(
         loan.status,
@@ -271,6 +278,26 @@ export default function Show({ loan }: { loan: Loan }) {
                                 area.
                             </p>
                         )}
+                        <div className="mt-4 space-y-2 border-t pt-4">
+                            {(loan.approvals ?? []).map((approval) => (
+                                <div
+                                    key={approval.id}
+                                    className="flex items-center justify-between gap-3 text-xs"
+                                >
+                                    <span className="font-semibold">
+                                        {approval.type === "owner"
+                                            ? `Owner item${approval.required_approver ? ` · ${approval.required_approver.name}` : ""}`
+                                            : "Kepala Logistik"}
+                                    </span>
+                                    <span className="text-muted">
+                                        {approval.status.replaceAll("_", " ")}
+                                        {approval.approver
+                                            ? ` · ${approval.approver.name}`
+                                            : ""}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                         {loan.approver && (
                             <p className="mt-4 border-t pt-4 text-xs text-muted">
                                 Disetujui oleh{" "}

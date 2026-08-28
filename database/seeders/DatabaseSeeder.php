@@ -28,7 +28,7 @@ class DatabaseSeeder extends Seeder
         $kepala = User::create(['name' => 'Hendra Wijaya', 'email' => 'kepala@tams.id', 'password' => $password, 'role' => 'kepala_logistik', 'institution' => 'Divisi Logistik']);
         $petugas = User::create(['name' => 'Dedi Kurniawan', 'email' => 'petugas@tams.id', 'password' => $password, 'role' => 'petugas', 'institution' => 'Tool Room A']);
         User::create(['name' => 'Siti Amalia', 'email' => 'petugas2@tams.id', 'password' => $password, 'role' => 'petugas', 'institution' => 'Tool Room B']);
-        $budi = User::create(['name' => 'Budi Hartono', 'email' => 'user@tams.id', 'password' => $password, 'role' => 'user', 'institution' => 'Workshop Mekanik', 'phone' => '081234567890', 'token_used' => 3]);
+        $budi = User::create(['sso_user_id' => 1005, 'name' => 'Budi Hartono', 'email' => 'user@tams.id', 'password' => $password, 'role' => 'user', 'institution' => 'Workshop Mekanik', 'phone' => '081234567890', 'token_used' => 3]);
         $andi = User::create(['name' => 'Andi Pratama', 'email' => 'andi@tams.id', 'password' => $password, 'role' => 'user', 'institution' => 'Workshop Elektrik', 'token_used' => 1]);
         $fajar = User::create(['name' => 'Fajar Nugroho', 'email' => 'fajar@tams.id', 'password' => $password, 'role' => 'user', 'institution' => 'Project Support', 'token_used' => 2]);
 
@@ -71,7 +71,7 @@ class DatabaseSeeder extends Seeder
             $type->checklistItems()->sync($checklistIds->mapWithKeys(fn (int $id, int $position) => [$id => ['position' => $position]]));
             $types[$code] = $type;
             for ($i = 1; $i <= 6; $i++) {
-                $units[$code][$i] = ToolUnit::create(['tool_type_id' => $type->id, 'asset_code' => sprintf('%s-2026-%04d', $code, $i), 'serial_number' => sprintf('SN-%s-%03d', substr($code, 4), $i), 'status' => 'tersedia', 'condition' => 'baik', 'location_id' => $location->id, 'owner' => 'TAMS Pusat', 'received_at' => now()->subMonths(6)]);
+                $units[$code][$i] = ToolUnit::create(['tool_type_id' => $type->id, 'asset_code' => sprintf('%s-2026-%04d', $code, $i), 'serial_number' => sprintf('SN-%s-%03d', substr($code, 4), $i), 'status' => 'tersedia', 'condition' => 'baik', 'location_id' => $location->id, 'owner' => $budi->name, 'owner_sso_user_id' => $budi->sso_user_id, 'received_at' => now()->subMonths(6)]);
             }
         }
 
@@ -90,8 +90,12 @@ class DatabaseSeeder extends Seeder
         foreach (['TWL-TGA', 'TWL-HAR'] as $code) {
             $token = $pendingTokens->shift();
             $token->update(['status' => 'direservasi']);
-            $pending->items()->create(['tool_type_id' => $types[$code]->id, 'physical_token_id' => $token->id]);
+            $unit = $units[$code][1];
+            $unit->update(['status' => 'direservasi']);
+            $pending->items()->create(['tool_type_id' => $types[$code]->id, 'physical_token_id' => $token->id, 'unit_id' => $unit->id]);
         }
+        $pending->approvals()->create(['type' => 'owner', 'required_sso_user_id' => $budi->sso_user_id, 'required_user_id' => $budi->id, 'status' => 'menunggu']);
+        $pending->approvals()->create(['type' => 'logistik', 'status' => 'tertunda']);
 
         $late = Loan::create(['trx_no' => 'TRX-0998', 'user_id' => $budi->id, 'borrower_id' => $budiBorrower->id, 'usage_type' => 'dalam_area', 'purpose' => 'Pemeliharaan tangga darurat', 'location_text' => 'Gedung A', 'start_date' => now()->subDays(10), 'due_date' => now()->subDays(6), 'status' => 'terlambat', 'tokens_used' => 1, 'handover_at' => now()->subDays(10)]);
         $units['TWL-TGA'][2]->update(['status' => 'dipinjam']);
@@ -113,7 +117,7 @@ class DatabaseSeeder extends Seeder
         $units['TWL-MLT'][5]->update(['status' => 'hilang', 'condition' => 'hilang']);
 
         SystemNotification::create(['user_id' => $budi->id, 'category' => 'perlu_tindakan', 'title' => 'Pengembalian TRX-1042 jatuh tempo besok', 'description' => 'Bor Tangan dan Helm Safety wajib dikembalikan sesuai tenggat.', 'object_type' => 'loan', 'object_id' => $running->id, 'href' => "/peminjaman/{$running->id}"]);
-        SystemNotification::create(['user_id' => $kepala->id, 'category' => 'perlu_tindakan', 'title' => 'Permohonan luar area menunggu persetujuan', 'description' => 'TRX-1058 · Fajar Nugroho · Renovasi kantor cabang Bekasi', 'object_type' => 'loan', 'object_id' => $pending->id, 'href' => "/peminjaman/{$pending->id}"]);
+        SystemNotification::create(['user_id' => $budi->id, 'category' => 'perlu_tindakan', 'title' => 'Persetujuan owner diperlukan', 'description' => 'TRX-1058 menunggu persetujuan owner item.', 'object_type' => 'loan', 'object_id' => $pending->id, 'href' => "/peminjaman/{$pending->id}"]);
         SystemNotification::create(['user_id' => $petugas->id, 'category' => 'perlu_tindakan', 'title' => 'TRX-0998 terlambat', 'description' => 'Budi Hartono belum mengembalikan Tangga Aluminium.', 'object_type' => 'loan', 'object_id' => $late->id, 'href' => "/peminjaman/{$late->id}"]);
 
         foreach ([

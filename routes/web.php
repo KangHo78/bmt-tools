@@ -39,6 +39,8 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
     Route::get('/peminjaman/baru', [LoanController::class, 'create'])->name('loans.create');
     Route::post('/peminjaman', [LoanController::class, 'store'])->name('loans.store');
     Route::get('/peminjaman/{loan}', [LoanController::class, 'show'])->name('loans.show');
+    Route::post('/peminjaman/{loan}/setujui', [LoanController::class, 'approve'])->name('loans.approve');
+    Route::post('/peminjaman/{loan}/tolak', [LoanController::class, 'reject'])->name('loans.reject');
     Route::post('/peminjaman/{loan}/perpanjang', [LoanController::class, 'extend'])->name('loans.extend');
     Route::get('/notifikasi', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifikasi/baca-semua', [NotificationController::class, 'readAll'])->name('notifications.read-all');
@@ -46,8 +48,6 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
 
     Route::middleware('approver')->group(function () {
         Route::get('/approval', [OperationsController::class, 'approvals'])->name('approvals.index');
-        Route::post('/peminjaman/{loan}/setujui', [LoanController::class, 'approve'])->name('loans.approve');
-        Route::post('/peminjaman/{loan}/tolak', [LoanController::class, 'reject'])->name('loans.reject');
         Route::post('/perpanjangan/{extension}/setujui', [LoanController::class, 'approveExtension'])->name('extensions.approve');
         Route::post('/perpanjangan/{extension}/tolak', [LoanController::class, 'rejectExtension'])->name('extensions.reject');
     });

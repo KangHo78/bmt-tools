@@ -116,19 +116,25 @@ class LoanController extends Controller
     public function show(Request $request, Loan $loan)
     {
         if ($request->user()->role === 'user') {
-            abort_unless(($loan->borrower?->user_id ?? $loan->user_id) === $request->user()->id, 403);
+            $isBorrower = ($loan->borrower?->user_id ?? $loan->user_id) === $request->user()->id;
+            abort_unless($isBorrower || $this->service->canReviewApproval($loan, $request->user()), 403);
         }
-        $loan->load(['borrower.user:id,email', 'approver:id,name', 'items.toolType', 'items.physicalToken', 'items.unit.location', 'extensions']);
+        $loan->load(['borrower.user:id,email', 'approver:id,name', 'approvals.approver:id,name', 'approvals.requiredApprover:id,name', 'items.toolType', 'items.physicalToken', 'items.unit.location', 'extensions']);
 
-        return Inertia::render('Loans/Show', ['loan' => $loan]);
+        return Inertia::render('Loans/Show', [
+            'loan' => $loan,
+            'canActOnApproval' => (bool) $this->service->actionableApproval($loan, $request->user()),
+        ]);
     }
 
     public function approve(Request $request, Loan $loan)
     {
         $data = $request->validate(['due_date' => ['nullable', 'date', 'after_or_equal:today']]);
-        $this->service->approve($loan, $request->user(), $data['due_date'] ?? null);
+        $stage = $this->service->approve($loan, $request->user(), $data['due_date'] ?? null);
 
-        return back()->with('success', 'Permohonan disetujui.');
+        return back()->with('success', $stage === 'owner'
+            ? 'Persetujuan owner tersimpan. Permohonan akan diteruskan ke Kepala Logistik setelah seluruh owner menyetujui.'
+            : 'Persetujuan Kepala Logistik tersimpan. Permohonan telah disetujui lengkap.');
     }
 
     public function reject(Request $request, Loan $loan)
