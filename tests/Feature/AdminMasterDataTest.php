@@ -36,6 +36,9 @@ class AdminMasterDataTest extends TestCase
         Schema::connection('sso')->dropIfExists('npb');
         Schema::connection('sso')->dropIfExists('purchase_order_item');
         Schema::connection('sso')->dropIfExists('purchase_order');
+        Schema::connection('sso')->dropIfExists('pr_subledger');
+        Schema::connection('sso')->dropIfExists('pr_part');
+        Schema::connection('sso')->dropIfExists('pr');
         Schema::connection('sso')->dropIfExists('users');
         Schema::connection('sso')->create('m_item', function (Blueprint $table) {
             $table->id();
@@ -93,14 +96,39 @@ class AdminMasterDataTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('purchase_order_id');
             $table->unsignedBigInteger('item_id');
+            $table->unsignedBigInteger('subledger_id')->nullable();
+            $table->unsignedBigInteger('pr_part_id')->nullable();
             $table->unsignedInteger('order_qty');
             $table->boolean('active')->default(true);
+            $table->boolean('flag')->default(true);
+        });
+        Schema::connection('sso')->create('pr', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('pr_peminta');
+            $table->boolean('flag')->default(true);
+        });
+        Schema::connection('sso')->create('pr_part', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('pr_id');
+            $table->unsignedBigInteger('item_id');
+            $table->boolean('flag')->default(true);
+        });
+        Schema::connection('sso')->create('pr_subledger', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('pr_part_id');
             $table->boolean('flag')->default(true);
         });
         DB::connection('sso')->table('users')->insert([
             'id' => 10,
             'name' => 'Peminta Tools Uji',
             'username' => 'peminta.tools',
+            'is_active' => true,
+            'is_group' => false,
+        ]);
+        DB::connection('sso')->table('users')->insert([
+            'id' => 11,
+            'name' => 'Peminta PR Tools Uji',
+            'username' => 'peminta.pr.tools',
             'is_active' => true,
             'is_group' => false,
         ]);
@@ -126,8 +154,26 @@ class AdminMasterDataTest extends TestCase
             'id' => 50,
             'purchase_order_id' => 40,
             'item_id' => 1,
+            'subledger_id' => 70,
+            'pr_part_id' => 60,
             'order_qty' => 2,
             'active' => true,
+            'flag' => true,
+        ]);
+        DB::connection('sso')->table('pr')->insert([
+            'id' => 80,
+            'pr_peminta' => 11,
+            'flag' => true,
+        ]);
+        DB::connection('sso')->table('pr_part')->insert([
+            'id' => 60,
+            'pr_id' => 80,
+            'item_id' => 1,
+            'flag' => true,
+        ]);
+        DB::connection('sso')->table('pr_subledger')->insert([
+            'id' => 70,
+            'pr_part_id' => 60,
             'flag' => true,
         ]);
     }
@@ -296,8 +342,8 @@ class AdminMasterDataTest extends TestCase
         $this->assertDatabaseHas('tool_units', ['tool_type_id' => $toolType->id, 'asset_code' => $source->item_no.'.2']);
         $this->assertDatabaseHas('tool_units', [
             'asset_code' => $source->item_no.'.1',
-            'owner' => $document->requester->name ?: $document->requester->username,
-            'owner_sso_user_id' => $document->requester->id,
+            'owner' => 'Peminta PR Tools Uji',
+            'owner_sso_user_id' => 11,
             'source_po_id' => $document->id,
             'source_po_item_id' => $document->items->firstWhere('item_id', $source->id)->id,
             'source_reference' => $document->po_no,
@@ -362,8 +408,7 @@ class AdminMasterDataTest extends TestCase
         $document = SsoPurchaseOrder::query()
             ->where('flag', 1)
             ->whereHas('items.item', fn ($query) => $query->tools())
-            ->whereHas('requester', fn ($query) => $query->where('is_active', 1)->where('is_group', 0))
-            ->with(['requester', 'items.item'])
+            ->with(['items.item'])
             ->firstOrFail();
         $source = $document->items->pluck('item')->first(fn ($item) => $item && $item->item_type === 'Tool' && $item->is_active && $item->flag);
 

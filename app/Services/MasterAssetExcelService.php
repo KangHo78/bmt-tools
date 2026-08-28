@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\SsoItem;
 use App\Models\SsoPurchaseOrder;
+use App\Models\SsoPurchaseOrderItem;
+use App\Models\SsoUser;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Support\AuditLogger;
@@ -71,8 +73,8 @@ class MasterAssetExcelService
             ['3. Isi satu NO. TOOL per baris. Baris kode berikutnya boleh mengosongkan ITEM NO dan QTY.'],
             ['4. Jumlah NO. TOOL untuk setiap ITEM NO wajib sama persis dengan QTY.'],
             ['5. NO. TOOL harus unik, belum ada di aplikasi, dan diawali ITEM NO diikuti titik.'],
-            ['6. PO NO harus ditemukan di Buana Multi, memuat ITEM NO terkait, dan memiliki user peminta.'],
-            ['7. Nama alat diambil dari Master Item; owner unit diambil dari user peminta PO.'],
+            ['6. PO NO harus ditemukan di Buana Multi, memuat ITEM NO terkait, dan terhubung ke PR yang valid.'],
+            ['7. Nama alat diambil dari Master Item; owner unit diambil dari user peminta pada PR asal setiap item.'],
             ['8. Seluruh import dibatalkan apabila ada satu data yang tidak valid. Maksimal 1.000 baris.'],
         ], null, 'A1');
         $instructions->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB('17211B');
@@ -162,7 +164,16 @@ class MasterAssetExcelService
             ->where(fn ($query) => $query
                 ->whereIn('po_no', $poNumbers)
                 ->orWhereIn('new_po_no', $poNumbers))
-            ->with(['requester:id,name,username,is_active,is_group', 'items' => fn ($query) => $query->where('flag', 1)->where('active', 1)->select(['id', 'purchase_order_id', 'item_id'])])
+            ->with([
+                'items' => fn ($query) => $query->where('flag', 1)->where('active', 1)->select(['id', 'purchase_order_id', 'item_id', 'subledger_id', 'pr_part_id']),
+                'items.subledger:id,pr_part_id',
+                'items.subledger.part:id,pr_id',
+                'items.subledger.part.purchaseRequest:id,pr_peminta',
+                'items.subledger.part.purchaseRequest.requester:id,name,username,is_active,is_group',
+                'items.part:id,pr_id',
+                'items.part.purchaseRequest:id,pr_peminta',
+                'items.part.purchaseRequest.requester:id,name,username,is_active,is_group',
+            ])
             ->get();
         $documents = $poNumbers->mapWithKeys(fn ($poNumber) => [
             $this->normaliseName((string) $poNumber) => $documentRecords->filter(fn ($document) => collect([$document->po_no, $document->new_po_no])
@@ -195,16 +206,20 @@ class MasterAssetExcelService
                         : "Baris {$group['row']}: PO NO {$group['po_no']} tidak unik pada Buana Multi.";
                 } else {
                     $document = $documentMatches->first();
-                    $requesterName = trim((string) ($document->requester?->name ?: $document->requester?->username));
-                    if (! $document->requester || ! $document->requester->is_active || $document->requester->is_group || $requesterName === '') {
-                        $errors[] = "Baris {$group['row']}: PO NO {$group['po_no']} tidak memiliki user peminta aktif yang valid.";
-                    }
                     if (isset($sources[$itemKey])) {
                         $sourceItem = $document->items->firstWhere('item_id', $sources[$itemKey]->id);
                         if (! $sourceItem) {
                             $errors[] = "Baris {$group['row']}: ITEM NO {$group['item_no']} tidak tercantum pada PO NO {$group['po_no']}.";
                         } else {
                             $group['source_po_item_id'] = $sourceItem->id;
+                            $requester = $this->purchaseRequester($sourceItem);
+                            $requesterName = trim((string) ($requester?->name ?: $requester?->username));
+                            if (! $requester || ! $requester->is_active || $requester->is_group || $requesterName === '') {
+                                $errors[] = "Baris {$group['row']}: ITEM NO {$group['item_no']} pada PO NO {$group['po_no']} tidak terhubung ke user peminta PR yang aktif.";
+                            } else {
+                                $group['owner'] = $requesterName;
+                                $group['owner_sso_user_id'] = $requester->id;
+                            }
                         }
                     }
                     $group['document_key'] = $this->normaliseName($group['po_no']);
@@ -249,7 +264,6 @@ class MasterAssetExcelService
             foreach ($groups as $group) {
                 $source = $sources[$group['item_key']];
                 $document = $documents[$group['document_key']]->first();
-                $owner = trim((string) ($document->requester->name ?: $document->requester->username));
                 $data = [
                     'sso_item_id' => $source->id,
                     'code' => $source->item_no,
@@ -279,8 +293,8 @@ class MasterAssetExcelService
                         'status' => 'tersedia',
                         'condition' => 'baik',
                         'location_id' => $toolType->primary_location_id,
-                        'owner' => $owner,
-                        'owner_sso_user_id' => $document->requester->id,
+                        'owner' => $group['owner'],
+                        'owner_sso_user_id' => $group['owner_sso_user_id'],
                         'source_po_id' => $document->id,
                         'source_po_item_id' => $group['source_po_item_id'],
                         'source_reference' => $group['po_no'],
@@ -327,6 +341,12 @@ class MasterAssetExcelService
         }
 
         return $text;
+    }
+
+    private function purchaseRequester(SsoPurchaseOrderItem $item): ?SsoUser
+    {
+        return $item->subledger?->part?->purchaseRequest?->requester
+            ?? $item->part?->purchaseRequest?->requester;
     }
 
     private function normaliseName(string $value): string

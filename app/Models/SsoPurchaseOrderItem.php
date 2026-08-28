@@ -23,4 +23,14 @@ class SsoPurchaseOrderItem extends Model
     {
         return $this->belongsTo(SsoItem::class, 'item_id');
     }
+
+    public function subledger()
+    {
+        return $this->belongsTo(SsoPrSubledger::class, 'subledger_id');
+    }
+
+    public function part()
+    {
+        return $this->belongsTo(SsoPrPart::class, 'pr_part_id');
+    }
 }
