@@ -29,6 +29,8 @@ export interface ToolType {
     primary_location?: { id: number; name: string };
     units_count?: number;
     available_count?: number;
+    owners?: string[];
+    po_numbers?: string[];
     units?: ToolUnit[];
 }
 export interface ToolUnit {

@@ -1,11 +1,13 @@
 import { Head, Link, usePage } from "@inertiajs/react";
 import {
     ArrowLeft,
+    FileText,
     MapPin,
     PackageCheck,
     Plus,
     Printer,
     ShieldCheck,
+    UserRound,
 } from "lucide-react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import { AssetVisual, Panel, StatusBadge } from "@/Components/TamsUI";
@@ -71,7 +73,7 @@ export default function Show({ tool }: { tool: ToolType }) {
                     <p className="mt-6 max-w-2xl leading-relaxed text-muted">
                         {tool.description}
                     </p>
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                         <Info
                             icon={PackageCheck}
                             label="Ketersediaan"
@@ -86,6 +88,21 @@ export default function Show({ tool }: { tool: ToolType }) {
                             icon={ShieldCheck}
                             label="Ketentuan"
                             value="Inspeksi wajib"
+                        />
+                        <Info
+                            icon={UserRound}
+                            label="Owner Item"
+                            value={
+                                tool.owners?.join(", ") || "Belum ditetapkan"
+                            }
+                        />
+                        <Info
+                            icon={FileText}
+                            label="Sumber PO"
+                            value={
+                                tool.po_numbers?.join(", ") ||
+                                "Tanpa referensi PO"
+                            }
                         />
                     </div>
                     <Panel className="mt-5 p-5">

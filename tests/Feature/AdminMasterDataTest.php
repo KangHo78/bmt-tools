@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Inertia\Testing\AssertableInertia as Assert;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -349,6 +350,12 @@ class AdminMasterDataTest extends TestCase
             'source_po_item_id' => $document->items->firstWhere('item_id', $source->id)->id,
             'source_reference' => $document->po_no,
         ]);
+        $this->actingAs($admin)->get(route('catalog.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tools.data', fn ($tools) => collect($tools)->contains(fn ($tool) => $tool['id'] === $toolType->id
+                    && $tool['owners'] === ['Peminta PR Tools Uji']
+                    && $tool['po_numbers'] === [$document->po_no])));
     }
 
     public function test_import_rejects_incomplete_tool_codes_without_partial_changes(): void

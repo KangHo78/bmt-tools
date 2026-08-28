@@ -1,10 +1,12 @@
 import { Head, Link, router } from "@inertiajs/react";
 import {
     Filter,
+    FileText,
     Plus,
     Search,
     SlidersHorizontal,
     Trash2,
+    UserRound,
     X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -37,11 +39,10 @@ export default function Index({
         category = filters.category ?? "",
         advanced: AdvancedFilters = advancedFilters,
     ) =>
-        router.get(
-            "/katalog",
-            cleanParams({ q, category, ...advanced }),
-            { preserveState: true, replace: true },
-        );
+        router.get("/katalog", cleanParams({ q, category, ...advanced }), {
+            preserveState: true,
+            replace: true,
+        });
     const removeAdvancedFilter = (field: AdvancedField) =>
         apply(filters.category ?? "", { ...advancedFilters, [field]: "" });
     const activeAdvanced = ADVANCED_FIELDS.filter(
@@ -192,6 +193,20 @@ export default function Index({
                                                 "Belum ditentukan"}
                                         </p>
                                     </div>
+                                    <div className="mt-3 grid gap-2 border-t pt-3 text-xs">
+                                        <CatalogMeta
+                                            icon={UserRound}
+                                            label="Owner Item"
+                                            values={tool.owners}
+                                            empty="Belum ditetapkan"
+                                        />
+                                        <CatalogMeta
+                                            icon={FileText}
+                                            label="Sumber PO"
+                                            values={tool.po_numbers}
+                                            empty="Tanpa referensi PO"
+                                        />
+                                    </div>
                                 </div>
                             </Link>
                         ))}
@@ -209,6 +224,39 @@ export default function Index({
                 </Panel>
             )}
         </TamsLayout>
+    );
+}
+
+function CatalogMeta({
+    icon: Icon,
+    label,
+    values,
+    empty,
+}: {
+    icon: typeof UserRound;
+    label: string;
+    values?: string[];
+    empty: string;
+}) {
+    const value = values?.length ? values.join(", ") : empty;
+
+    return (
+        <div className="grid grid-cols-[28px_1fr] items-center gap-2 rounded border border-line bg-canvas/55 p-2.5">
+            <span className="grid size-7 place-items-center rounded-sm bg-ink text-white">
+                <Icon size={14} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+                <span className="block text-[9px] font-bold uppercase tracking-[.13em] text-muted">
+                    {label}
+                </span>
+                <p
+                    className="mt-0.5 truncate font-num text-[11px] font-semibold"
+                    title={value}
+                >
+                    {value}
+                </p>
+            </div>
+        </div>
     );
 }
 
@@ -310,7 +358,9 @@ function AdvancedFilterModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="advanced-filter-title"
-            onMouseDown={(event) => event.target === event.currentTarget && close()}
+            onMouseDown={(event) =>
+                event.target === event.currentTarget && close()
+            }
         >
             <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg border border-white/15 bg-surface shadow-2xl">
                 <div className="flex items-start justify-between gap-5 border-b border-line bg-ink p-5 text-white sm:p-6">
@@ -350,7 +400,9 @@ function AdvancedFilterModal({
                             className="control flex-1"
                             value={nextField}
                             onChange={(event) =>
-                                setNextField(event.target.value as AdvancedField)
+                                setNextField(
+                                    event.target.value as AdvancedField,
+                                )
                             }
                         >
                             <option value="">Pilih kriteria tambahan...</option>
@@ -444,7 +496,11 @@ function AdvancedFilterModal({
                     </button>
                     <span />
                     <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={close} className="btn-secondary">
+                        <button
+                            type="button"
+                            onClick={close}
+                            className="btn-secondary"
+                        >
                             Batal
                         </button>
                         <button
@@ -522,7 +578,9 @@ function getAdvancedFilters(filters: CatalogFilters): AdvancedFilters {
 
 function cleanParams(values: Record<string, string | undefined>) {
     return Object.fromEntries(
-        Object.entries(values).filter(([, value]) => value !== "" && value != null),
+        Object.entries(values).filter(
+            ([, value]) => value !== "" && value != null,
+        ),
     );
 }
 
@@ -532,7 +590,10 @@ function formatFilterValue(
     locations: Array<{ id: number; name: string }>,
 ) {
     if (field === "primary_location") {
-        return locations.find((location) => String(location.id) === value)?.name ?? value;
+        return (
+            locations.find((location) => String(location.id) === value)?.name ??
+            value
+        );
     }
     if (field === "availability") {
         return value === "available" ? "Tersedia" : "Tidak tersedia";

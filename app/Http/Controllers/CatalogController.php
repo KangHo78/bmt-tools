@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Location;
 use App\Models\SsoItem;
 use App\Models\ToolType;
+use App\Models\ToolUnit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -34,6 +35,7 @@ class CatalogController extends Controller
             ->when($request->availability === 'unavailable', fn ($q) => $q->whereDoesntHave('units', fn ($unit) => $unit->where('status', 'tersedia')))
             ->orderBy('name')->paginate(12)->withQueryString();
         $this->applyBuanaMultiImages($tools->getCollection());
+        $this->applyCatalogProvenance($tools->getCollection());
 
         return Inertia::render('Catalog/Index', [
             'tools' => $tools,
@@ -47,6 +49,7 @@ class CatalogController extends Controller
     {
         $toolType->load(['category', 'primaryLocation', 'units.location']);
         $this->applyBuanaMultiImages(collect([$toolType]));
+        $this->applyCatalogProvenance(collect([$toolType]));
 
         return Inertia::render('Catalog/Show', ['tool' => $toolType]);
     }
@@ -102,6 +105,31 @@ class CatalogController extends Controller
             if ($sourceImage !== '') {
                 $toolType->setAttribute('image_url', $sourceImage);
             }
+        });
+    }
+
+    /** @param Collection<int, ToolType> $toolTypes */
+    private function applyCatalogProvenance(Collection $toolTypes): void
+    {
+        $toolTypeIds = $toolTypes->pluck('id');
+        if ($toolTypeIds->isEmpty()) {
+            return;
+        }
+
+        $unitsByType = ToolUnit::query()
+            ->whereIn('tool_type_id', $toolTypeIds)
+            ->get(['tool_type_id', 'owner', 'source_po_id', 'source_reference'])
+            ->groupBy('tool_type_id');
+
+        $toolTypes->each(function (ToolType $toolType) use ($unitsByType): void {
+            $units = $unitsByType->get($toolType->id, collect());
+            $toolType->setAttribute('owners', $units->pluck('owner')->filter()->unique()->values());
+            $toolType->setAttribute('po_numbers', $units
+                ->whereNotNull('source_po_id')
+                ->pluck('source_reference')
+                ->filter()
+                ->unique()
+                ->values());
         });
     }
 }
