@@ -336,7 +336,7 @@ class MasterAssetExcelService
     private function toolCodeText(mixed $value): string
     {
         $text = $this->cellText($value);
-        if (is_numeric($text) && str_contains($text, '.')) {
+        if (preg_match('/^-?\d+\.\d{10,}$/', $text)) {
             return rtrim(rtrim(number_format((float) $text, 10, '.', ''), '0'), '.');
         }
 

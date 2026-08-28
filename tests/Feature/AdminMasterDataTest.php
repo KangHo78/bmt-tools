@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -381,6 +382,24 @@ class AdminMasterDataTest extends TestCase
         $this->assertDatabaseHas('tool_units', ['asset_code' => $source->item_no.'.1']);
     }
 
+    public function test_import_keeps_tool_sequence_one_and_ten_as_distinct_codes(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        [$source, $document] = $this->toolSourcePair();
+        $rows = [[$source->item_no, 10, $source->item_no.'.1', $document->po_no]];
+        foreach (range(2, 10) as $sequence) {
+            $rows[] = [null, null, $source->item_no.'.'.$sequence];
+        }
+
+        $this->actingAs($admin)
+            ->post(route('admin.tool-types.import'), ['import_file' => $this->masterAssetWorkbook($rows)])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('tool_units', ['asset_code' => $source->item_no.'.1']);
+        $this->assertDatabaseHas('tool_units', ['asset_code' => $source->item_no.'.10']);
+        $this->assertDatabaseCount('tool_units', 10);
+    }
+
     /** @param list<array<int, int|string|null>> $rows */
     private function masterAssetWorkbook(array $rows, array $headers = ['ITEM NO', 'QTY', 'NO. TOOL', 'PO NO']): UploadedFile
     {
@@ -389,6 +408,18 @@ class AdminMasterDataTest extends TestCase
             $headers,
             ...$rows,
         ]);
+        foreach (['ITEM NO', 'NO. TOOL'] as $header) {
+            $columnIndex = array_search($header, $headers, true);
+            if ($columnIndex === false) {
+                continue;
+            }
+            foreach ($rows as $index => $row) {
+                $value = $row[$columnIndex] ?? null;
+                if ($value !== null) {
+                    $spreadsheet->getActiveSheet()->setCellValueExplicit([$columnIndex + 1, $index + 2], (string) $value, DataType::TYPE_STRING);
+                }
+            }
+        }
         $path = tempnam(sys_get_temp_dir(), 'master-asset-import-');
         (new Xlsx($spreadsheet))->save($path);
         $spreadsheet->disconnectWorksheets();
