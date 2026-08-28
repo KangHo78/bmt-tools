@@ -30,7 +30,8 @@ class ToolsAssetWorkflowTest extends TestCase
     {
         $user = User::where('email', 'andi@tams.id')->firstOrFail();
         $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
-        $unit = $type->units()->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->firstOrFail();
+        $type->units()->where('status', 'tersedia')->update(['owner' => null, 'owner_sso_user_id' => null]);
+        $unit = $type->units()->where('status', 'tersedia')->firstOrFail();
         $before = $user->token_used;
         $token = $user->borrower->tokens()->where('status', 'dipegang_peminjam')->firstOrFail();
 
@@ -46,9 +47,8 @@ class ToolsAssetWorkflowTest extends TestCase
 
         $loan = Loan::latest('id')->firstOrFail();
         $response->assertRedirect(route('loans.show', $loan));
-        $this->assertSame('menunggu_approval', $loan->status);
-        $this->assertDatabaseHas('loan_approvals', ['loan_id' => $loan->id, 'type' => 'owner', 'status' => 'menunggu']);
-        $this->assertDatabaseHas('loan_approvals', ['loan_id' => $loan->id, 'type' => 'logistik', 'status' => 'tertunda']);
+        $this->assertSame('menunggu_serah_terima', $loan->status);
+        $this->assertDatabaseMissing('loan_approvals', ['loan_id' => $loan->id]);
         $this->assertSame(1, $loan->tokens_used);
         $this->assertTrue($loan->due_date->isFriday());
         $this->assertSame($before + 1, $user->fresh()->token_used);
@@ -104,7 +104,8 @@ class ToolsAssetWorkflowTest extends TestCase
         $loan = Loan::latest('id')->firstOrFail();
         $response->assertRedirect(route('loans.show', $loan));
         $this->assertSame($borrower->id, $loan->user_id);
-        $this->assertSame('menunggu_approval', $loan->status);
+        $this->assertSame('menunggu_serah_terima', $loan->status);
+        $this->assertDatabaseMissing('loan_approvals', ['loan_id' => $loan->id]);
         $this->assertNull($loan->approved_by_id);
         $this->assertNull($loan->approved_at);
         $this->assertSame($borrowerTokens + 1, $borrower->fresh()->token_used);

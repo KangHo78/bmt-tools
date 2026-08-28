@@ -10,6 +10,7 @@ import {
     useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useLocale } from "@/lib/i18n";
 
 type SelectEvent = { target: { value: string } };
 
@@ -38,6 +39,7 @@ export default function SearchableSelect({
     name,
     "aria-label": ariaLabel,
 }: SearchableSelectProps) {
+    const { t } = useLocale();
     const buttonRef = useRef<HTMLButtonElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
@@ -57,7 +59,9 @@ export default function SearchableSelect({
                     }>(child)
                 )
                     return [];
-                const label = Children.toArray(child.props.children).join("");
+                const label = t(
+                    Children.toArray(child.props.children).join(""),
+                );
                 return [
                     {
                         value: String(child.props.value ?? ""),
@@ -66,7 +70,7 @@ export default function SearchableSelect({
                     },
                 ];
             }),
-        [children],
+        [children, t],
     );
     const selected = options.find(
         (option) => option.value === String(value ?? ""),
@@ -160,7 +164,7 @@ export default function SearchableSelect({
                 ref={buttonRef}
                 type="button"
                 disabled={disabled}
-                aria-label={ariaLabel}
+                aria-label={ariaLabel ? t(ariaLabel) : undefined}
                 aria-haspopup="listbox"
                 aria-expanded={open}
                 onClick={() => (open ? setOpen(false) : openMenu())}
@@ -175,7 +179,7 @@ export default function SearchableSelect({
                 <span
                     className={`min-w-0 truncate ${selected?.value === "" ? "text-muted" : ""}`}
                 >
-                    {selected?.label || "Pilih opsi"}
+                    {selected?.label || t("Pilih opsi")}
                 </span>
                 <ChevronDown
                     size={16}
@@ -234,7 +238,7 @@ export default function SearchableSelect({
                                         }
                                     }}
                                     className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"
-                                    placeholder="Cari pilihan..."
+                                    placeholder={t("Cari pilihan...")}
                                 />
                             </div>
                         </div>
@@ -272,7 +276,7 @@ export default function SearchableSelect({
                                 ))
                             ) : (
                                 <p className="px-3 py-6 text-center text-sm text-muted">
-                                    Pilihan tidak ditemukan.
+                                    {t("Pilihan tidak ditemukan.")}
                                 </p>
                             )}
                         </div>

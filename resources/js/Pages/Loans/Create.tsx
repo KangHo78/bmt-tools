@@ -294,11 +294,8 @@ export default function Create({
                                     <button
                                         type="button"
                                         key={tool.id}
-                                        disabled={!hasOwner}
-                                        onClick={() =>
-                                            hasOwner && toggle(tool.id)
-                                        }
-                                        className={`overflow-hidden rounded-lg border text-left ${active ? "border-green ring-2 ring-green/15" : hasOwner ? "bg-white hover:border-ink" : "cursor-not-allowed border-red/20 bg-red/5 opacity-70"}`}
+                                        onClick={() => toggle(tool.id)}
+                                        className={`overflow-hidden rounded-lg border text-left ${active ? "border-green ring-2 ring-green/15" : "bg-white hover:border-ink"}`}
                                     >
                                         <div className="grid grid-cols-[92px_1fr]">
                                             <AssetGlyph code={tool.code} />
@@ -315,7 +312,7 @@ export default function Create({
                                                 </p>
                                                 {!hasOwner && (
                                                     <p className="mt-1 text-xs font-semibold text-red">
-                                                        Owner perlu dilengkapi
+                                                        Hanya dapat dipinjam di dalam workshop
                                                     </p>
                                                 )}
                                             </div>
@@ -360,7 +357,7 @@ export default function Create({
                             onClick={() => setUsage("dalam_area")}
                             icon={MapPin}
                             title="Dalam Workshop"
-                            desc="Tenggat Jumat terdekat; memerlukan approval owner dan Kepala Logistik."
+                            desc="Langsung siap diserahterimakan tanpa persetujuan. Tenggat Jumat terdekat."
                         />
                         <Usage
                             active={usage === "luar_area"}
@@ -515,7 +512,13 @@ export default function Create({
                             !purpose ||
                             !location ||
                             (usage === "luar_area" &&
-                                (!due || !letter || !logisticsApprovers.length))
+                                (!due ||
+                                    !letter ||
+                                    !logisticsApprovers.length ||
+                                    chosen.some(
+                                        (tool) =>
+                                            !tool.approval_owner_sso_user_id,
+                                    )))
                         }
                     />
                 </Panel>

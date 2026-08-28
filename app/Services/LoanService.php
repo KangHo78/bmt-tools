@@ -31,6 +31,7 @@ class LoanService
             $borrower = Borrower::query()->lockForUpdate()->findOrFail($borrower->id);
             $typeIds = array_values(array_unique($data['tool_type_ids']));
             $needed = count($typeIds);
+            $outside = $data['usage_type'] === 'luar_area';
             $tokenCodes = collect($data['token_codes'] ?? [])->map(fn ($code) => mb_strtoupper(trim((string) $code)));
             if ($tokenCodes->count() !== $needed || $tokenCodes->filter()->count() !== $needed) {
                 throw ValidationException::withMessages(['token_codes' => 'Setiap alat wajib ditukar dengan satu kode token fisik.']);
@@ -42,15 +43,18 @@ class LoanService
             foreach ($typeIds as $typeId) {
                 $unitId = $data['tool_unit_ids'][$typeId] ?? null;
                 $unit = ToolUnit::query()->whereKey($unitId)->where('tool_type_id', $typeId)
-                    ->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')
+                    ->where('status', 'tersedia')
+                    ->when($outside, fn ($query) => $query->whereNotNull('owner_sso_user_id'))
                     ->lockForUpdate()->first();
                 if (! $unit) {
-                    throw ValidationException::withMessages(['tool_unit_ids' => 'Unit yang ditampilkan pada detail sudah tidak tersedia. Pilih ulang alat untuk memperbarui owner approval.']);
+                    $message = $outside
+                        ? 'Unit sudah tidak tersedia atau belum memiliki owner. Pilih ulang alat untuk memperbarui owner approval.'
+                        : 'Unit yang dipilih sudah tidak tersedia. Pilih ulang alat.';
+                    throw ValidationException::withMessages(['tool_unit_ids' => $message]);
                 }
                 $reservedUnits[$typeId] = $unit;
             }
 
-            $outside = $data['usage_type'] === 'luar_area';
             $due = $outside ? Carbon::parse($data['due_date'])->endOfDay() : $this->nearestFriday(Carbon::parse($data['start_date']));
             $loan = Loan::create([
                 'trx_no' => $this->nextNumber(),
@@ -62,7 +66,7 @@ class LoanService
                 'location_text' => $data['location_text'],
                 'start_date' => Carbon::parse($data['start_date']),
                 'due_date' => $due,
-                'status' => 'menunggu_approval',
+                'status' => $outside ? 'menunggu_approval' : 'menunggu_serah_terima',
                 'approved_by_id' => null,
                 'approved_at' => null,
                 'letter_url' => $letter?->store('loan-letters', 'public'),
@@ -88,29 +92,35 @@ class LoanService
                 $token->update(['status' => 'direservasi']);
                 $unit->update(['status' => 'direservasi']);
             }
-            $ownerSsoIds = collect($reservedUnits)->pluck('owner_sso_user_id')->unique()->values();
-            $ownerUsers = $this->ownerUsers($ownerSsoIds);
-            if ($ownerUsers->count() !== $ownerSsoIds->count()) {
-                throw ValidationException::withMessages(['tool_type_ids' => 'Salah satu owner item tidak lagi aktif atau tidak ditemukan di Buana Multi.']);
+            $ownerUsers = collect();
+            if ($outside) {
+                $ownerSsoIds = collect($reservedUnits)->pluck('owner_sso_user_id')->unique()->values();
+                $ownerUsers = $this->ownerUsers($ownerSsoIds);
+                if ($ownerUsers->count() !== $ownerSsoIds->count()) {
+                    throw ValidationException::withMessages(['tool_type_ids' => 'Salah satu owner item tidak lagi aktif atau tidak ditemukan di Buana Multi.']);
+                }
+                $ownerUsersBySsoId = $ownerUsers->keyBy('sso_user_id');
+                foreach ($ownerSsoIds as $ownerSsoId) {
+                    $loan->approvals()->create(['type' => 'owner', 'required_sso_user_id' => $ownerSsoId, 'required_user_id' => $ownerUsersBySsoId[$ownerSsoId]->id, 'status' => 'menunggu']);
+                }
+                $loan->approvals()->create(['type' => 'logistik', 'status' => 'tertunda']);
             }
-            $ownerUsersBySsoId = $ownerUsers->keyBy('sso_user_id');
-            foreach ($ownerSsoIds as $ownerSsoId) {
-                $loan->approvals()->create(['type' => 'owner', 'required_sso_user_id' => $ownerSsoId, 'required_user_id' => $ownerUsersBySsoId[$ownerSsoId]->id, 'status' => 'menunggu']);
-            }
-            $loan->approvals()->create(['type' => 'logistik', 'status' => 'tertunda']);
             $borrower->user?->increment('token_used', $needed);
             $this->log($createdBy, 'loan.created', $loan, [
                 'tokens' => $needed,
                 'borrower_id' => $borrower->id,
                 'created_on_behalf' => ! $borrower->user?->is($createdBy),
+                'requires_approval' => $outside,
             ]);
 
             if ($borrower->user && ! $borrower->user->is($createdBy)) {
                 $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$createdBy->name} membuat {$loan->trx_no} untuk Anda.");
             }
 
-            foreach ($ownerUsers as $owner) {
-                $this->notifyApprover($loan, $owner, 'Persetujuan owner diperlukan', "{$borrower->name} mengajukan peminjaman aset milik Anda.");
+            if ($outside) {
+                foreach ($ownerUsers as $owner) {
+                    $this->notifyApprover($loan, $owner, 'Persetujuan owner diperlukan', "{$borrower->name} mengajukan peminjaman aset milik Anda.");
+                }
             }
 
             return $loan;
