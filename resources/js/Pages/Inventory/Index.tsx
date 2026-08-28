@@ -1,5 +1,11 @@
 import { Head, Link, router } from "@inertiajs/react";
-import { ArrowRightLeft, PackagePlus, Printer, Search, X } from "lucide-react";
+import {
+    ArrowRightLeft,
+    PackagePlus,
+    Search,
+    UserRound,
+    X,
+} from "lucide-react";
 import { useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import SearchableSelect from "@/Components/SearchableSelect";
@@ -58,7 +64,7 @@ export default function Index({
                                     router.get("/inventaris", { q })
                                 }
                                 className="control pl-10"
-                                placeholder="Cari kode aset..."
+                                placeholder="Cari kode aset, jenis, atau owner..."
                             />
                         </div>
                         <button
@@ -70,12 +76,13 @@ export default function Index({
                     </div>
                     {units.data.length ? (
                         <div className="overflow-x-auto">
-                            <table className="w-full min-w-[760px] text-left text-sm">
+                            <table className="w-full min-w-[920px] text-left text-sm">
                                 <thead className="bg-ink text-[10px] uppercase tracking-wider text-white">
                                     <tr>
                                         <th className="p-3">Kode</th>
                                         <th className="p-3">Jenis</th>
                                         <th className="p-3">Lokasi</th>
+                                        <th className="p-3">Owner Aset</th>
                                         <th className="p-3">Kondisi</th>
                                         <th className="p-3">Status</th>
                                         <th className="p-3"></th>
@@ -101,6 +108,31 @@ export default function Index({
                                             </td>
                                             <td className="p-3 text-xs">
                                                 {u.location?.name ?? "—"}
+                                            </td>
+                                            <td className="p-3">
+                                                {u.owner ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="grid size-8 shrink-0 place-items-center rounded-full border border-green/25 bg-green/10 text-green">
+                                                            <UserRound
+                                                                size={15}
+                                                            />
+                                                        </span>
+                                                        <div>
+                                                            <strong className="block text-xs">
+                                                                {u.owner}
+                                                            </strong>
+                                                            <small className="mt-0 text-[10px] uppercase tracking-wider text-muted">
+                                                                {u.owner_sso_user_id
+                                                                    ? "Terhubung BMT Multi"
+                                                                    : "Belum terhubung"}
+                                                            </small>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="inline-flex rounded-sm border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-700">
+                                                        Belum ditetapkan
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="p-3 capitalize">
                                                 {u.condition.replaceAll(

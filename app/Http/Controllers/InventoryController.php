@@ -22,7 +22,15 @@ class InventoryController extends Controller
     public function index(Request $request)
     {
         return Inertia::render('Inventory/Index', [
-            'units' => ToolUnit::with(['toolType:id,name,code', 'location:id,name'])->when($request->q, fn ($query, $q) => $query->where('asset_code', 'like', "%{$q}%"))->orderBy('asset_code')->paginate(20)->withQueryString(),
+            'units' => ToolUnit::with(['toolType:id,name,code', 'location:id,name'])
+                ->when($request->q, fn ($query, $q) => $query->where(function ($query) use ($q) {
+                    $query->where('asset_code', 'like', "%{$q}%")
+                        ->orWhere('owner', 'like', "%{$q}%")
+                        ->orWhereHas('toolType', fn ($query) => $query->where('name', 'like', "%{$q}%"));
+                }))
+                ->orderBy('asset_code')
+                ->paginate(20)
+                ->withQueryString(),
             'receipts' => AssetReceipt::with('receiver:id,name')->withCount('items')->latest()->limit(8)->get(),
             'locations' => Location::orderBy('name')->get(['id', 'name']),
             'filters' => $request->only('q'),

@@ -30,7 +30,8 @@ type Borrower = {
 type LoanTool = ToolType & {
     approval_unit_id: number;
     approval_unit_code: string;
-    approval_owner: string;
+    approval_owner?: string;
+    approval_owner_sso_user_id?: number;
 };
 
 export default function Create({
@@ -286,12 +287,18 @@ export default function Create({
                         <div className="grid gap-3 p-4 sm:grid-cols-2">
                             {tools.map((tool) => {
                                 const active = selected.includes(tool.id);
+                                const hasOwner = Boolean(
+                                    tool.approval_owner_sso_user_id,
+                                );
                                 return (
                                     <button
                                         type="button"
                                         key={tool.id}
-                                        onClick={() => toggle(tool.id)}
-                                        className={`overflow-hidden rounded-lg border text-left ${active ? "border-green ring-2 ring-green/15" : "bg-white hover:border-ink"}`}
+                                        disabled={!hasOwner}
+                                        onClick={() =>
+                                            hasOwner && toggle(tool.id)
+                                        }
+                                        className={`overflow-hidden rounded-lg border text-left ${active ? "border-green ring-2 ring-green/15" : hasOwner ? "bg-white hover:border-ink" : "cursor-not-allowed border-red/20 bg-red/5 opacity-70"}`}
                                     >
                                         <div className="grid grid-cols-[92px_1fr]">
                                             <AssetGlyph code={tool.code} />
@@ -306,6 +313,11 @@ export default function Create({
                                                     {tool.available_count}{" "}
                                                     tersedia
                                                 </p>
+                                                {!hasOwner && (
+                                                    <p className="mt-1 text-xs font-semibold text-red">
+                                                        Owner perlu dilengkapi
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                         {active && (
@@ -456,7 +468,8 @@ export default function Create({
                                                 className="rounded border bg-surface px-3 py-2"
                                             >
                                                 <p className="text-xs font-semibold">
-                                                    {tool.approval_owner}
+                                                    {tool.approval_owner ||
+                                                        "Owner belum ditetapkan"}
                                                 </p>
                                                 <p className="mt-0.5 font-num text-[10px] text-muted">
                                                     {tool.name} ·{" "}

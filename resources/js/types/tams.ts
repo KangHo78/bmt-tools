@@ -38,6 +38,7 @@ export interface ToolUnit {
     status: string;
     condition: string;
     owner?: string;
+    owner_sso_user_id?: number;
     location?: { id: number; name: string };
     tool_type?: ToolType;
 }

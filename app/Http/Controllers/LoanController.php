@@ -62,12 +62,13 @@ class LoanController extends Controller
 
         return Inertia::render('Loans/Create', [
             'tools' => ToolType::query()
-                ->whereHas('units', fn ($query) => $query->where('status', 'tersedia')->whereNotNull('owner_sso_user_id'))
-                ->withCount(['units as available_count' => fn ($query) => $query->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')])
+                ->whereHas('units', fn ($query) => $query->where('status', 'tersedia'))
+                ->withCount(['units as available_count' => fn ($query) => $query->where('status', 'tersedia')])
                 ->addSelect([
-                    'approval_unit_id' => ToolUnit::query()->select('id')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->orderBy('id')->limit(1),
-                    'approval_unit_code' => ToolUnit::query()->select('asset_code')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->orderBy('id')->limit(1),
-                    'approval_owner' => ToolUnit::query()->select('owner')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->orderBy('id')->limit(1),
+                    'approval_unit_id' => ToolUnit::query()->select('id')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->orderByRaw('CASE WHEN owner_sso_user_id IS NULL THEN 1 ELSE 0 END')->orderBy('id')->limit(1),
+                    'approval_unit_code' => ToolUnit::query()->select('asset_code')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->orderByRaw('CASE WHEN owner_sso_user_id IS NULL THEN 1 ELSE 0 END')->orderBy('id')->limit(1),
+                    'approval_owner' => ToolUnit::query()->select('owner')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->orderByRaw('CASE WHEN owner_sso_user_id IS NULL THEN 1 ELSE 0 END')->orderBy('id')->limit(1),
+                    'approval_owner_sso_user_id' => ToolUnit::query()->select('owner_sso_user_id')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->orderByRaw('CASE WHEN owner_sso_user_id IS NULL THEN 1 ELSE 0 END')->orderBy('id')->limit(1),
                 ])
                 ->orderBy('name')
                 ->get(),

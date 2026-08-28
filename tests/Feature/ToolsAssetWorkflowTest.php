@@ -55,6 +55,7 @@ class ToolsAssetWorkflowTest extends TestCase
     public function test_user_can_open_new_loan_form_with_available_tools(): void
     {
         $user = User::where('email', 'user@tams.id')->firstOrFail();
+        ToolType::where('code', 'TWL-DRL')->firstOrFail()->units()->update(['owner_sso_user_id' => null]);
 
         $this->actingAs($user)
             ->get(route('loans.create'))
@@ -63,7 +64,8 @@ class ToolsAssetWorkflowTest extends TestCase
                 ->component('Loans/Create')
                 ->has('tools')
                 ->has('logisticsApprovers')
-                ->where('tools.0.approval_owner', fn ($owner) => filled($owner))
+                ->where('tools', fn ($tools) => collect($tools)->contains(fn ($tool) => $tool['code'] === 'TWL-DRL' && $tool['approval_owner_sso_user_id'] === null)
+                    && collect($tools)->contains(fn ($tool) => filled($tool['approval_owner_sso_user_id'])))
                 ->where('tools.0.available_count', fn ($count) => (int) $count > 0));
     }
 
@@ -323,6 +325,21 @@ class ToolsAssetWorkflowTest extends TestCase
     {
         $user = User::where('email', 'user@tams.id')->firstOrFail();
         $this->actingAs($user)->get(route('inventory.index'))->assertForbidden();
+    }
+
+    public function test_inventory_exposes_asset_owner_and_can_search_by_owner(): void
+    {
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $unit = ToolType::where('code', 'TWL-GRD')->firstOrFail()->units()->firstOrFail();
+
+        $this->actingAs($staff)->get(route('inventory.index', ['q' => $unit->owner]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inventory/Index')
+                ->where('filters.q', $unit->owner)
+                ->where('units.data', fn ($units) => collect($units)->contains(fn ($row) => $row['id'] === $unit->id
+                    && $row['owner'] === $unit->owner
+                    && $row['owner_sso_user_id'] === $unit->owner_sso_user_id)));
     }
 
     public function test_each_role_can_render_its_primary_workspace(): void
