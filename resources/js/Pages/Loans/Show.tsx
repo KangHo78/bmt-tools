@@ -30,8 +30,7 @@ export default function Show({
     const [extend, setExtend] = useState(false);
     const rejectForm = useForm({ reason: "" });
     const extendForm = useForm({ new_due_date: "", reason: "" });
-    const canApprove =
-        canActOnApproval && loan.status === "menunggu_approval";
+    const canApprove = canActOnApproval && loan.status === "menunggu_approval";
     const canOperate = ["petugas", "admin"].includes(user.role);
     const active = ["berjalan", "terlambat", "menunggu_inspeksi"].includes(
         loan.status,
@@ -163,7 +162,11 @@ export default function Show({
                                         {item.unit?.asset_code ??
                                             "Unit ditentukan saat serah terima"}
                                     </p>
-                                    {item.physical_token && <p className="mt-1 inline-flex rounded bg-amber/15 px-2 py-1 font-num text-xs font-bold">Token {item.physical_token.code}</p>}
+                                    {item.physical_token && (
+                                        <p className="mt-1 inline-flex rounded bg-amber/15 px-2 py-1 font-num text-xs font-bold">
+                                            Token {item.physical_token.code}
+                                        </p>
+                                    )}
                                 </div>
                                 <StatusBadge
                                     status={
@@ -239,7 +242,11 @@ export default function Show({
                             <Meta
                                 icon={UserRound}
                                 label="Kontak"
-                                value={loan.borrower.phone ?? loan.borrower.user?.email ?? "Tanpa akun"}
+                                value={
+                                    loan.borrower.phone ??
+                                    loan.borrower.user?.email ??
+                                    "Tanpa akun"
+                                }
                             />
                             <Meta
                                 icon={MapPin}

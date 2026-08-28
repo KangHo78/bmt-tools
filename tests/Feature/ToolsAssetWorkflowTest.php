@@ -28,11 +28,13 @@ class ToolsAssetWorkflowTest extends TestCase
     {
         $user = User::where('email', 'andi@tams.id')->firstOrFail();
         $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $unit = $type->units()->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->firstOrFail();
         $before = $user->token_used;
         $token = $user->borrower->tokens()->where('status', 'dipegang_peminjam')->firstOrFail();
 
         $response = $this->actingAs($user)->post(route('loans.store'), [
             'tool_type_ids' => [$type->id],
+            'tool_unit_ids' => [$type->id => $unit->id],
             'usage_type' => 'dalam_area',
             'purpose' => 'Perbaikan pagar workshop',
             'location_text' => 'Workshop Trowulan',
@@ -60,6 +62,8 @@ class ToolsAssetWorkflowTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Loans/Create')
                 ->has('tools')
+                ->has('logisticsApprovers')
+                ->where('tools.0.approval_owner', fn ($owner) => filled($owner))
                 ->where('tools.0.available_count', fn ($count) => (int) $count > 0));
     }
 
@@ -68,6 +72,7 @@ class ToolsAssetWorkflowTest extends TestCase
         $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
         $borrower = User::where('email', 'user@tams.id')->firstOrFail();
         $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $unit = $type->units()->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->firstOrFail();
         $borrowerTokens = $borrower->token_used;
         $staffTokens = $staff->token_used;
         $profile = $borrower->borrower;
@@ -84,6 +89,7 @@ class ToolsAssetWorkflowTest extends TestCase
         $response = $this->actingAs($staff)->post(route('loans.store'), [
             'borrower_id' => $profile->id,
             'tool_type_ids' => [$type->id],
+            'tool_unit_ids' => [$type->id => $unit->id],
             'usage_type' => 'dalam_area',
             'purpose' => 'Pekerjaan yang diinput petugas',
             'location_text' => 'Workshop Trowulan',
@@ -116,9 +122,11 @@ class ToolsAssetWorkflowTest extends TestCase
         $borrower = User::where('email', 'user@tams.id')->firstOrFail();
         $other = User::where('email', 'andi@tams.id')->firstOrFail();
         $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $unit = $type->units()->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->firstOrFail();
         $this->actingAs($borrower)->post(route('loans.store'), [
             'borrower_id' => $other->id,
             'tool_type_ids' => [$type->id],
+            'tool_unit_ids' => [$type->id => $unit->id],
             'usage_type' => 'dalam_area',
             'purpose' => 'Percobaan manipulasi peminjam',
             'location_text' => 'Workshop Trowulan',
@@ -130,10 +138,11 @@ class ToolsAssetWorkflowTest extends TestCase
     {
         $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
         $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $unit = $type->units()->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->firstOrFail();
 
         $response = $this->actingAs($staff)->post(route('loans.store'), [
             'new_borrower' => ['name' => 'Tamu Workshop', 'identifier' => 'NRP-9001', 'institution' => 'Vendor Harian', 'phone' => '081200009001'],
-            'tool_type_ids' => [$type->id], 'token_codes' => [$type->id => 'TK-9001'],
+            'tool_type_ids' => [$type->id], 'tool_unit_ids' => [$type->id => $unit->id], 'token_codes' => [$type->id => 'TK-9001'],
             'usage_type' => 'dalam_area', 'purpose' => 'Perbaikan sementara',
             'location_text' => 'Workshop Trowulan', 'start_date' => now()->addDay()->toDateString(),
         ]);
@@ -196,16 +205,17 @@ class ToolsAssetWorkflowTest extends TestCase
     {
         $user = User::where('email', 'andi@tams.id')->firstOrFail();
         $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $unit = $type->units()->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->firstOrFail();
         $token = $user->borrower->tokens()->where('status', 'dipegang_peminjam')->firstOrFail();
 
         $this->actingAs($user)->post(route('loans.store'), [
-            'tool_type_ids' => [$type->id], 'usage_type' => 'luar_area', 'purpose' => 'Pekerjaan cabang',
+            'tool_type_ids' => [$type->id], 'tool_unit_ids' => [$type->id => $unit->id], 'usage_type' => 'luar_area', 'purpose' => 'Pekerjaan cabang',
             'location_text' => 'Surabaya', 'start_date' => now()->addDay()->toDateString(), 'due_date' => now()->addWeek()->toDateString(),
             'token_codes' => [$type->id => $token->code],
         ])->assertSessionHasErrors('letter');
 
         $this->actingAs($user)->post(route('loans.store'), [
-            'tool_type_ids' => [$type->id], 'usage_type' => 'luar_area', 'purpose' => 'Pekerjaan cabang',
+            'tool_type_ids' => [$type->id], 'tool_unit_ids' => [$type->id => $unit->id], 'usage_type' => 'luar_area', 'purpose' => 'Pekerjaan cabang',
             'location_text' => 'Surabaya', 'start_date' => now()->addDay()->toDateString(), 'due_date' => now()->addWeek()->toDateString(),
             'letter' => UploadedFile::fake()->create('surat.pdf', 100, 'application/pdf'),
             'token_codes' => [$type->id => $token->code],

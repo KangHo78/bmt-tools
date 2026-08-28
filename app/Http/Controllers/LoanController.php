@@ -8,6 +8,7 @@ use App\Models\LoanExtension;
 use App\Models\SsoUser;
 use App\Models\SystemNotification;
 use App\Models\ToolType;
+use App\Models\ToolUnit;
 use App\Models\User;
 use App\Services\LoanService;
 use App\Services\SsoUserSynchronizer;
@@ -61,10 +62,16 @@ class LoanController extends Controller
 
         return Inertia::render('Loans/Create', [
             'tools' => ToolType::query()
-                ->whereHas('units', fn ($query) => $query->where('status', 'tersedia'))
-                ->withCount(['units as available_count' => fn ($query) => $query->where('status', 'tersedia')])
+                ->whereHas('units', fn ($query) => $query->where('status', 'tersedia')->whereNotNull('owner_sso_user_id'))
+                ->withCount(['units as available_count' => fn ($query) => $query->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')])
+                ->addSelect([
+                    'approval_unit_id' => ToolUnit::query()->select('id')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->orderBy('id')->limit(1),
+                    'approval_unit_code' => ToolUnit::query()->select('asset_code')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->orderBy('id')->limit(1),
+                    'approval_owner' => ToolUnit::query()->select('owner')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')->orderBy('id')->limit(1),
+                ])
                 ->orderBy('name')
                 ->get(),
+            'logisticsApprovers' => $this->approvalConfiguration->approvers()->map->only(['id', 'name'])->values(),
             'preselected' => array_filter([(int) $request->query('tool')]),
             'canChooseBorrower' => $canChooseBorrower,
             'selectedBorrowerId' => $ownBorrower->id,
@@ -82,6 +89,7 @@ class LoanController extends Controller
         $canChooseBorrower = $request->user()->hasRole('petugas', 'admin');
         $data = $request->validate([
             'tool_type_ids' => ['required', 'array', 'min:1'], 'tool_type_ids.*' => ['integer', 'distinct', 'exists:tool_types,id'],
+            'tool_unit_ids' => ['required', 'array', 'min:1'], 'tool_unit_ids.*' => ['integer', 'distinct', 'exists:tool_units,id'],
             'usage_type' => ['required', Rule::in(['dalam_area', 'luar_area'])], 'purpose' => ['required', 'string', 'max:1000'],
             'location_text' => ['required', 'string', 'max:255'], 'start_date' => ['required', 'date', 'after_or_equal:today'],
             'due_date' => ['nullable', 'required_if:usage_type,luar_area', 'date', 'after_or_equal:start_date'],

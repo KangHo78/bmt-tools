@@ -40,11 +40,12 @@ class LoanService
             }
             $reservedUnits = [];
             foreach ($typeIds as $typeId) {
-                $unit = ToolUnit::query()->where('tool_type_id', $typeId)
+                $unitId = $data['tool_unit_ids'][$typeId] ?? null;
+                $unit = ToolUnit::query()->whereKey($unitId)->where('tool_type_id', $typeId)
                     ->where('status', 'tersedia')->whereNotNull('owner_sso_user_id')
-                    ->orderBy('id')->lockForUpdate()->first();
+                    ->lockForUpdate()->first();
                 if (! $unit) {
-                    throw ValidationException::withMessages(['tool_type_ids' => 'Salah satu jenis alat tidak memiliki unit tersedia dengan owner dari Buana Multi.']);
+                    throw ValidationException::withMessages(['tool_unit_ids' => 'Unit yang ditampilkan pada detail sudah tidak tersedia. Pilih ulang alat untuk memperbarui owner approval.']);
                 }
                 $reservedUnits[$typeId] = $unit;
             }

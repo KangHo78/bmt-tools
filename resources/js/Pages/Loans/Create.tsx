@@ -7,6 +7,7 @@ import {
     KeyRound,
     MapPin,
     PackagePlus,
+    ShieldCheck,
     UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -26,18 +27,26 @@ type Borrower = {
     tokens: { id: number; code: string; status: string }[];
 };
 
+type LoanTool = ToolType & {
+    approval_unit_id: number;
+    approval_unit_code: string;
+    approval_owner: string;
+};
+
 export default function Create({
     tools,
     preselected,
     borrowers,
     canChooseBorrower,
     selectedBorrowerId,
+    logisticsApprovers,
 }: {
-    tools: ToolType[];
+    tools: LoanTool[];
     preselected: number[];
     borrowers: Borrower[];
     canChooseBorrower: boolean;
     selectedBorrowerId: number;
+    logisticsApprovers: { id: number; name: string }[];
 }) {
     const [step, setStep] = useState(1),
         [selected, setSelected] = useState<number[]>(preselected);
@@ -95,7 +104,13 @@ export default function Create({
     const submit = () => {
         const data = new FormData();
         selected.forEach((id) => {
+            const tool = tools.find((item) => item.id === id);
             data.append("tool_type_ids[]", String(id));
+            if (tool)
+                data.append(
+                    `tool_unit_ids[${id}]`,
+                    String(tool.approval_unit_id),
+                );
             data.append(`token_codes[${id}]`, tokenCodes[id] || "");
         });
         data.append("usage_type", usage);
@@ -117,7 +132,11 @@ export default function Create({
             onError: (e: any) => {
                 setErrors(e);
                 setStep(
-                    e.tool_type_ids
+                    e.tool_type_ids ||
+                        e.tool_unit_ids ||
+                        Object.keys(e).some((key) =>
+                            key.startsWith("tool_unit_ids."),
+                        )
                         ? 1
                         : e.token_codes ||
                             Object.keys(e).some((k) =>
@@ -407,13 +426,83 @@ export default function Create({
                             </Field>
                         )}
                     </div>
+                    {usage === "luar_area" && (
+                        <div className="mt-6 overflow-hidden rounded-lg border border-amber/40 bg-canvas">
+                            <div className="flex items-center gap-3 border-b border-amber/30 bg-ink px-5 py-4 text-white">
+                                <span className="grid size-10 shrink-0 place-items-center rounded-md bg-amber text-ink">
+                                    <ShieldCheck size={20} />
+                                </span>
+                                <div>
+                                    <p className="font-num text-[10px] font-bold uppercase tracking-[.16em] text-amber">
+                                        Jalur persetujuan
+                                    </p>
+                                    <h3 className="font-display text-xl font-bold">
+                                        Dua tahap sebelum alat diserahkan
+                                    </h3>
+                                </div>
+                            </div>
+                            <div className="grid md:grid-cols-2">
+                                <div className="border-b border-line p-5 md:border-b-0 md:border-r">
+                                    <p className="font-num text-[10px] font-bold uppercase tracking-wider text-green">
+                                        Approval 01
+                                    </p>
+                                    <h4 className="mt-1 font-display text-xl font-bold">
+                                        Owner Aset
+                                    </h4>
+                                    <div className="mt-3 space-y-2">
+                                        {chosen.map((tool) => (
+                                            <div
+                                                key={tool.id}
+                                                className="rounded border bg-surface px-3 py-2"
+                                            >
+                                                <p className="text-xs font-semibold">
+                                                    {tool.approval_owner}
+                                                </p>
+                                                <p className="mt-0.5 font-num text-[10px] text-muted">
+                                                    {tool.name} ·{" "}
+                                                    {tool.approval_unit_code}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="p-5">
+                                    <p className="font-num text-[10px] font-bold uppercase tracking-wider text-amber-ink">
+                                        Approval 02
+                                    </p>
+                                    <h4 className="mt-1 font-display text-xl font-bold">
+                                        Kepala Logistik
+                                    </h4>
+                                    <p className="mt-3 text-sm font-semibold leading-relaxed">
+                                        {logisticsApprovers.length
+                                            ? logisticsApprovers
+                                                  .map((item) => item.name)
+                                                  .join(" / ")
+                                            : "Belum dikonfigurasi"}
+                                    </p>
+                                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                                        Tahap ini aktif setelah seluruh owner
+                                        aset menyetujui.
+                                    </p>
+                                    {!logisticsApprovers.length && (
+                                        <p className="mt-3 rounded border border-red/25 bg-red/10 p-2 text-xs font-semibold text-red">
+                                            Administrator harus menetapkan
+                                            approver logistik sebelum permohonan
+                                            dapat dilanjutkan.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <Actions
                         back={() => setStep(2)}
                         next={() => setStep(4)}
                         disabled={
                             !purpose ||
                             !location ||
-                            (usage === "luar_area" && (!due || !letter))
+                            (usage === "luar_area" &&
+                                (!due || !letter || !logisticsApprovers.length))
                         }
                     />
                 </Panel>
