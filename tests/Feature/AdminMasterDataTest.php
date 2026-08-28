@@ -6,7 +6,7 @@ use App\Models\Category;
 use App\Models\ChecklistItem;
 use App\Models\Location;
 use App\Models\SsoItem;
-use App\Models\SsoNpb;
+use App\Models\SsoPurchaseOrder;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Models\User;
@@ -34,6 +34,8 @@ class AdminMasterDataTest extends TestCase
         Schema::connection('sso')->dropIfExists('m_item');
         Schema::connection('sso')->dropIfExists('npb_item');
         Schema::connection('sso')->dropIfExists('npb');
+        Schema::connection('sso')->dropIfExists('purchase_order_item');
+        Schema::connection('sso')->dropIfExists('purchase_order');
         Schema::connection('sso')->dropIfExists('users');
         Schema::connection('sso')->create('m_item', function (Blueprint $table) {
             $table->id();
@@ -80,6 +82,21 @@ class AdminMasterDataTest extends TestCase
             $table->unsignedBigInteger('item_id');
             $table->unsignedInteger('qty');
         });
+        Schema::connection('sso')->create('purchase_order', function (Blueprint $table) {
+            $table->id();
+            $table->string('po_no');
+            $table->string('new_po_no')->nullable();
+            $table->unsignedBigInteger('created_by');
+            $table->boolean('flag')->default(true);
+        });
+        Schema::connection('sso')->create('purchase_order_item', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('purchase_order_id');
+            $table->unsignedBigInteger('item_id');
+            $table->unsignedInteger('order_qty');
+            $table->boolean('active')->default(true);
+            $table->boolean('flag')->default(true);
+        });
         DB::connection('sso')->table('users')->insert([
             'id' => 10,
             'name' => 'Peminta Tools Uji',
@@ -98,6 +115,20 @@ class AdminMasterDataTest extends TestCase
             'npb_id' => 20,
             'item_id' => 1,
             'qty' => 2,
+        ]);
+        DB::connection('sso')->table('purchase_order')->insert([
+            'id' => 40,
+            'po_no' => '0475/WO-PO/04/2026',
+            'created_by' => 10,
+            'flag' => true,
+        ]);
+        DB::connection('sso')->table('purchase_order_item')->insert([
+            'id' => 50,
+            'purchase_order_id' => 40,
+            'item_id' => 1,
+            'order_qty' => 2,
+            'active' => true,
+            'flag' => true,
         ]);
     }
 
@@ -250,7 +281,7 @@ class AdminMasterDataTest extends TestCase
         [$source, $document] = $this->toolSourcePair();
 
         $file = $this->masterAssetWorkbook([
-            [$source->item_no, 2, $source->item_no.'.1', $document->npb__no],
+            [$source->item_no, 2, $source->item_no.'.1', $document->po_no],
             [null, null, $source->item_no.'.2'],
         ]);
         $this->actingAs($admin)
@@ -267,9 +298,9 @@ class AdminMasterDataTest extends TestCase
             'asset_code' => $source->item_no.'.1',
             'owner' => $document->requester->name ?: $document->requester->username,
             'owner_sso_user_id' => $document->requester->id,
-            'source_npb_id' => $document->id,
-            'source_npb_item_id' => $document->items->firstWhere('item_id', $source->id)->id,
-            'source_reference' => $document->npb__no,
+            'source_po_id' => $document->id,
+            'source_po_item_id' => $document->items->firstWhere('item_id', $source->id)->id,
+            'source_reference' => $document->po_no,
         ]);
     }
 
@@ -278,7 +309,7 @@ class AdminMasterDataTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         [$source, $document] = $this->toolSourcePair();
         $file = $this->masterAssetWorkbook([
-            [$source->item_no, 2, $source->item_no.'.1', $document->npb__no],
+            [$source->item_no, 2, $source->item_no.'.1', $document->po_no],
         ]);
 
         $this->actingAs($admin)
@@ -294,7 +325,7 @@ class AdminMasterDataTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         [$source, $document] = $this->toolSourcePair();
         $file = $this->masterAssetWorkbook([
-            [1, $source->item_no, $source->item_name, 1, $source->item_no.'.1', $document->npb__no, 'Ruang Tools'],
+            [1, $source->item_no, $source->item_name, 1, $source->item_no.'.1', $document->po_no, 'Ruang Tools'],
         ], ['No', 'Item No', 'Nama Barang', 'QTY', 'No. Tool', 'PO NO', 'Location']);
 
         $this->actingAs($admin)
@@ -325,10 +356,10 @@ class AdminMasterDataTest extends TestCase
         );
     }
 
-    /** @return array{SsoItem, SsoNpb} */
+    /** @return array{SsoItem, SsoPurchaseOrder} */
     private function toolSourcePair(): array
     {
-        $document = SsoNpb::query()
+        $document = SsoPurchaseOrder::query()
             ->where('flag', 1)
             ->whereHas('items.item', fn ($query) => $query->tools())
             ->whereHas('requester', fn ($query) => $query->where('is_active', 1)->where('is_group', 0))

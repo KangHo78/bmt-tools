@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\SsoItem;
-use App\Models\SsoNpb;
+use App\Models\SsoPurchaseOrder;
 use App\Models\ToolType;
 use App\Models\ToolUnit;
 use App\Support\AuditLogger;
@@ -111,7 +111,7 @@ class MasterAssetExcelService
 
         $dataRows = array_filter(
             array_slice($rows, 1, null, true),
-            fn ($row) => collect($columns)->contains(fn ($column) => trim((string) ($row[$column] ?? '')) !== '')
+            fn ($row) => collect($columns)->contains(fn ($column) => $this->cellText($row[$column] ?? null) !== '')
         );
         if ($dataRows === []) {
             throw ValidationException::withMessages(['import_file' => 'Belum ada data tools untuk diimpor.']);
@@ -125,10 +125,10 @@ class MasterAssetExcelService
         $currentKey = null;
         foreach ($dataRows as $offset => $row) {
             $excelRow = $offset + 1;
-            $itemNo = trim((string) ($row[$columns['item_no']] ?? ''));
-            $quantity = trim((string) ($row[$columns['qty']] ?? ''));
-            $toolCode = trim((string) ($row[$columns['no_tool']] ?? ''));
-            $poNumber = trim((string) ($row[$columns['po_no']] ?? ''));
+            $itemNo = $this->cellText($row[$columns['item_no']] ?? null);
+            $quantity = $this->cellText($row[$columns['qty']] ?? null);
+            $toolCode = $this->toolCodeText($row[$columns['no_tool']] ?? null);
+            $poNumber = $this->cellText($row[$columns['po_no']] ?? null);
 
             if ($itemNo !== '') {
                 $itemKey = $this->normaliseName($itemNo);
@@ -157,12 +157,19 @@ class MasterAssetExcelService
         $sources = SsoItem::tools()->whereIn('item_no', $itemNumbers)->get()
             ->keyBy(fn ($item) => $this->normaliseName((string) $item->item_no));
         $poNumbers = collect($groups)->pluck('po_no')->filter()->unique()->values();
-        $documents = SsoNpb::query()
+        $documentRecords = SsoPurchaseOrder::query()
             ->where('flag', 1)
-            ->whereIn('npb__no', $poNumbers)
-            ->with(['requester:id,name,username,is_active,is_group', 'items:id,npb_id,item_id'])
-            ->get()
-            ->groupBy(fn ($document) => $this->normaliseName((string) $document->npb__no));
+            ->where(fn ($query) => $query
+                ->whereIn('po_no', $poNumbers)
+                ->orWhereIn('new_po_no', $poNumbers))
+            ->with(['requester:id,name,username,is_active,is_group', 'items' => fn ($query) => $query->where('flag', 1)->where('active', 1)->select(['id', 'purchase_order_id', 'item_id'])])
+            ->get();
+        $documents = $poNumbers->mapWithKeys(fn ($poNumber) => [
+            $this->normaliseName((string) $poNumber) => $documentRecords->filter(fn ($document) => collect([$document->po_no, $document->new_po_no])
+                ->filter()
+                ->contains(fn ($reference) => $this->normaliseName((string) $reference) === $this->normaliseName((string) $poNumber)))
+                ->values(),
+        ]);
         $seenCodes = [];
         foreach ($groups as &$group) {
             $itemKey = $group['item_key'];
@@ -197,7 +204,7 @@ class MasterAssetExcelService
                         if (! $sourceItem) {
                             $errors[] = "Baris {$group['row']}: ITEM NO {$group['item_no']} tidak tercantum pada PO NO {$group['po_no']}.";
                         } else {
-                            $group['source_npb_item_id'] = $sourceItem->id;
+                            $group['source_po_item_id'] = $sourceItem->id;
                         }
                     }
                     $group['document_key'] = $this->normaliseName($group['po_no']);
@@ -274,8 +281,8 @@ class MasterAssetExcelService
                         'location_id' => $toolType->primary_location_id,
                         'owner' => $owner,
                         'owner_sso_user_id' => $document->requester->id,
-                        'source_npb_id' => $document->id,
-                        'source_npb_item_id' => $group['source_npb_item_id'],
+                        'source_po_id' => $document->id,
+                        'source_po_item_id' => $group['source_po_item_id'],
                         'source_reference' => $group['po_no'],
                     ]);
                     $unitCount++;
@@ -301,6 +308,25 @@ class MasterAssetExcelService
         $slug = preg_replace('/[^a-z0-9]+/', '_', mb_strtolower($value));
 
         return trim(preg_replace('/_+/', '_', $slug), '_');
+    }
+
+    private function cellText(mixed $value): string
+    {
+        if (is_float($value)) {
+            return rtrim(rtrim(number_format($value, 10, '.', ''), '0'), '.');
+        }
+
+        return trim((string) $value);
+    }
+
+    private function toolCodeText(mixed $value): string
+    {
+        $text = $this->cellText($value);
+        if (is_numeric($text) && str_contains($text, '.')) {
+            return rtrim(rtrim(number_format((float) $text, 10, '.', ''), '0'), '.');
+        }
+
+        return $text;
     }
 
     private function normaliseName(string $value): string
