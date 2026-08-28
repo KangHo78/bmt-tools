@@ -9,6 +9,8 @@ use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -340,6 +342,35 @@ class ToolsAssetWorkflowTest extends TestCase
                 ->where('units.data', fn ($units) => collect($units)->contains(fn ($row) => $row['id'] === $unit->id
                     && $row['owner'] === $unit->owner
                     && $row['owner_sso_user_id'] === $unit->owner_sso_user_id)));
+    }
+
+    public function test_operational_reset_removes_assets_and_transactions_but_preserves_master_support_data(): void
+    {
+        $preserved = [
+            'users' => DB::table('users')->count(),
+            'borrowers' => DB::table('borrowers')->count(),
+            'physical_tokens' => DB::table('physical_tokens')->count(),
+            'categories' => DB::table('categories')->count(),
+            'checklist_items' => DB::table('checklist_items')->count(),
+            'locations' => DB::table('locations')->count(),
+            'system_settings' => DB::table('system_settings')->count(),
+        ];
+
+        $this->assertGreaterThan(0, DB::table('tool_types')->count());
+        $this->assertGreaterThan(0, DB::table('tool_units')->count());
+        $this->assertGreaterThan(0, DB::table('loans')->count());
+
+        $exitCode = Artisan::call('app:reset-operational-data', ['--force' => true]);
+
+        $this->assertSame(0, $exitCode);
+        foreach (['tool_types', 'tool_units', 'loans', 'loan_items', 'loan_approvals', 'maintenance_orders', 'stock_audits', 'asset_cases', 'notifications', 'activity_logs'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
+        foreach ($preserved as $table => $count) {
+            $this->assertDatabaseCount($table, $count);
+        }
+        $this->assertSame(0, (int) DB::table('users')->max('token_used'));
+        $this->assertSame(0, DB::table('physical_tokens')->where('status', '!=', 'dipegang_peminjam')->count());
     }
 
     public function test_each_role_can_render_its_primary_workspace(): void
