@@ -1,5 +1,5 @@
 import { Link } from "@inertiajs/react";
-import { Box, ChevronRight } from "lucide-react";
+import { Box, ChevronLeft, ChevronRight } from "lucide-react";
 import {
     useEffect,
     useState,
@@ -120,24 +120,56 @@ export function Pagination({
     links: { url: string | null; label: string; active: boolean }[];
 }) {
     return (
-        <div className="flex flex-wrap gap-1 border-t p-3">
-            {links.map((link, i) =>
-                link.url ? (
+        <nav
+            aria-label="Navigasi halaman"
+            className="flex flex-wrap items-center gap-1 border-t p-3"
+        >
+            {links.map((link, i) => {
+                const isPrevious = i === 0;
+                const isNext = i === links.length - 1;
+                const ariaLabel = isPrevious
+                    ? "Halaman sebelumnya"
+                    : isNext
+                      ? "Halaman berikutnya"
+                      : link.active
+                        ? `Halaman ${link.label}, aktif`
+                        : `Buka halaman ${link.label}`;
+                const content = isPrevious ? (
+                    <ChevronLeft aria-hidden="true" size={17} />
+                ) : isNext ? (
+                    <ChevronRight aria-hidden="true" size={17} />
+                ) : (
+                    <span dangerouslySetInnerHTML={{ __html: link.label }} />
+                );
+                const className = `grid min-h-10 min-w-10 place-items-center rounded px-3 text-xs font-semibold transition-colors ${
+                    link.active
+                        ? "bg-ink text-white"
+                        : "text-ink hover:bg-canvas"
+                }`;
+
+                return link.url ? (
                     <Link
                         key={i}
                         href={link.url}
-                        className={`rounded px-3 py-2 text-xs font-semibold ${link.active ? "bg-ink text-white" : "hover:bg-canvas"}`}
-                        dangerouslySetInnerHTML={{ __html: link.label }}
-                    />
+                        aria-label={ariaLabel}
+                        aria-current={link.active ? "page" : undefined}
+                        title={isPrevious || isNext ? ariaLabel : undefined}
+                        className={className}
+                    >
+                        {content}
+                    </Link>
                 ) : (
                     <span
                         key={i}
-                        className="px-3 py-2 text-xs text-muted/50"
-                        dangerouslySetInnerHTML={{ __html: link.label }}
-                    />
-                ),
-            )}
-        </div>
+                        aria-label={ariaLabel}
+                        aria-disabled="true"
+                        className={`${className} cursor-not-allowed text-muted/35 hover:bg-transparent`}
+                    >
+                        {content}
+                    </span>
+                );
+            })}
+        </nav>
     );
 }
 export function AssetGlyph({
