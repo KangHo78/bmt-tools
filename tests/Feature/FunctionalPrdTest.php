@@ -82,6 +82,28 @@ class FunctionalPrdTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_manual_receipt_assigns_a_different_po_number_per_item_number(): void
+    {
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $types = ToolType::query()->take(2)->get();
+        $location = Location::where('type', 'slot')->firstOrFail();
+
+        $this->actingAs($staff)->post(route('inventory.receipts.store'), [
+            'owner_institution' => 'Workshop Sipil',
+            'received_date' => today()->toDateString(),
+            'items' => [
+                ['tool_type_id' => $types[0]->id, 'location_id' => $location->id, 'received_quantity' => 2, 'initial_condition' => 'baik', 'source_po_number' => 'PO-MANUAL-001'],
+                ['tool_type_id' => $types[1]->id, 'location_id' => $location->id, 'received_quantity' => 1, 'initial_condition' => 'baik', 'source_po_number' => 'PO-MANUAL-002'],
+            ],
+        ])->assertRedirect();
+
+        $receipt = AssetReceipt::latest('id')->firstOrFail()->load('items.units');
+        $this->assertSame('PO-MANUAL-001', $receipt->items->firstWhere('tool_type_id', $types[0]->id)->source_po_number);
+        $this->assertSame(['PO-MANUAL-001'], $receipt->items->firstWhere('tool_type_id', $types[0]->id)->units->pluck('source_po_number')->unique()->values()->all());
+        $this->assertSame('PO-MANUAL-002', $receipt->items->firstWhere('tool_type_id', $types[1]->id)->source_po_number);
+        $this->assertSame(['PO-MANUAL-002'], $receipt->items->firstWhere('tool_type_id', $types[1]->id)->units->pluck('source_po_number')->unique()->values()->all());
+    }
+
     public function test_location_move_records_origin_destination_and_reason(): void
     {
         $staff = User::where('email', 'petugas@tams.id')->firstOrFail();

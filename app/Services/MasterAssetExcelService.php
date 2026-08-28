@@ -298,6 +298,7 @@ class MasterAssetExcelService
                         'source_po_id' => $document->id,
                         'source_po_item_id' => $group['source_po_item_id'],
                         'source_reference' => $group['po_no'],
+                        'source_po_number' => $group['po_no'],
                     ]);
                     $unitCount++;
                 }

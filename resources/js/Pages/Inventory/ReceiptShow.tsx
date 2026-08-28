@@ -6,8 +6,7 @@ import { formatDate } from "@/lib/ui";
 
 export default function ReceiptShow({ receipt }: { receipt: any }) {
     const total = receipt.items.reduce(
-        (quantity: number, item: any) =>
-            quantity + item.received_quantity,
+        (quantity: number, item: any) => quantity + item.received_quantity,
         0,
     );
 
@@ -61,7 +60,12 @@ export default function ReceiptShow({ receipt }: { receipt: any }) {
                                     </p>
                                     {item.source_reference && (
                                         <p className="mt-2 inline-flex rounded-full border border-amber/40 bg-amber/10 px-2.5 py-1 font-num text-[10px] font-bold">
-                                            Sumber {item.source_reference}
+                                            NPB {item.source_reference}
+                                        </p>
+                                    )}
+                                    {item.source_po_number && (
+                                        <p className="ml-2 mt-2 inline-flex rounded-full border border-green/30 bg-green/10 px-2.5 py-1 font-num text-[10px] font-bold text-green">
+                                            PO {item.source_po_number}
                                         </p>
                                     )}
                                 </div>

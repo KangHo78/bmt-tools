@@ -112,6 +112,7 @@ class InventoryController extends Controller
             'items.*.initial_condition' => ['required', Rule::in(['baik', 'perlu_perhatian', 'rusak'])],
             'items.*.source_npb_id' => ['nullable', 'integer'], 'items.*.source_npb_item_id' => ['nullable', 'integer'],
             'items.*.source_reference' => ['nullable', 'string', 'max:255'],
+            'items.*.source_po_number' => ['nullable', 'string', 'max:100'],
         ]);
         $owner = $data['owner_institution'] ?? null;
         if ($data['owner_sso_user_id'] ?? null) {
@@ -147,7 +148,7 @@ class InventoryController extends Controller
                     do {
                         $code = sprintf('%s.%d', $type->code, $sequence++);
                     } while (ToolUnit::where('asset_code', $code)->exists());
-                    ToolUnit::create(['tool_type_id' => $type->id, 'asset_receipt_item_id' => $item->id, 'asset_code' => $code, 'status' => $row['initial_condition'] === 'rusak' ? 'rusak' : 'tersedia', 'condition' => $row['initial_condition'], 'location_id' => $row['location_id'], 'owner' => $owner, 'owner_sso_user_id' => $data['owner_sso_user_id'] ?? null, 'source_npb_id' => $row['source_npb_id'] ?? null, 'source_npb_item_id' => $row['source_npb_item_id'] ?? null, 'source_reference' => $row['source_reference'] ?? null, 'received_at' => $data['received_date']]);
+                    ToolUnit::create(['tool_type_id' => $type->id, 'asset_receipt_item_id' => $item->id, 'asset_code' => $code, 'status' => $row['initial_condition'] === 'rusak' ? 'rusak' : 'tersedia', 'condition' => $row['initial_condition'], 'location_id' => $row['location_id'], 'owner' => $owner, 'owner_sso_user_id' => $data['owner_sso_user_id'] ?? null, 'source_npb_id' => $row['source_npb_id'] ?? null, 'source_npb_item_id' => $row['source_npb_item_id'] ?? null, 'source_reference' => $row['source_reference'] ?? null, 'source_po_number' => $row['source_po_number'] ?? null, 'received_at' => $data['received_date']]);
                 }
             }
             AuditLogger::record('asset.received', $receipt, ['items' => count($data['items'])]);

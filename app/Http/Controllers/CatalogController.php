@@ -118,15 +118,14 @@ class CatalogController extends Controller
 
         $unitsByType = ToolUnit::query()
             ->whereIn('tool_type_id', $toolTypeIds)
-            ->get(['tool_type_id', 'owner', 'source_po_id', 'source_reference'])
+            ->get(['tool_type_id', 'owner', 'source_po_number'])
             ->groupBy('tool_type_id');
 
         $toolTypes->each(function (ToolType $toolType) use ($unitsByType): void {
             $units = $unitsByType->get($toolType->id, collect());
             $toolType->setAttribute('owners', $units->pluck('owner')->filter()->unique()->values());
             $toolType->setAttribute('po_numbers', $units
-                ->whereNotNull('source_po_id')
-                ->pluck('source_reference')
+                ->pluck('source_po_number')
                 ->filter()
                 ->unique()
                 ->values());

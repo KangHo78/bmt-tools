@@ -50,6 +50,7 @@ type ReceiptItem = {
     source_npb_id?: number;
     source_npb_item_id?: number;
     source_reference?: string;
+    source_po_number?: string;
 };
 
 const blankComposer = () => ({
@@ -57,6 +58,7 @@ const blankComposer = () => ({
     location_id: "",
     received_quantity: 1,
     initial_condition: "baik",
+    source_po_number: "",
 });
 
 export default function CreateReceipt({
@@ -99,10 +101,15 @@ export default function CreateReceipt({
 
     const appendManualItem = () => {
         if (!composer.tool_type_id || !composer.location_id) {
-            setComposerError("Pilih jenis alat dan lokasi sebelum menambahkan item.");
+            setComposerError(
+                "Pilih jenis alat dan lokasi sebelum menambahkan item.",
+            );
             return;
         }
-        if (composer.received_quantity < 1 || composer.received_quantity > 100) {
+        if (
+            composer.received_quantity < 1 ||
+            composer.received_quantity > 100
+        ) {
             setComposerError("Qty diterima harus antara 1 sampai 100.");
             return;
         }
@@ -121,23 +128,21 @@ export default function CreateReceipt({
         const appended = selectedNpbs.flatMap((npb) =>
             npb.items
                 .filter((item) => !existingIds.has(item.id))
-                .map(
-                    (item): ReceiptItem => ({
-                        key: makeKey(`npb-${item.id}`),
-                        tool_type_id: String(item.tool_type_id),
-                        location_id: item.primary_location_id
-                            ? String(item.primary_location_id)
-                            : "",
-                        received_quantity: Math.min(
-                            100,
-                            Math.max(1, item.quantity),
-                        ),
-                        initial_condition: "baik",
-                        source_npb_id: npb.id,
-                        source_npb_item_id: item.id,
-                        source_reference: npb.reference,
-                    }),
-                ),
+                .map((item): ReceiptItem => ({
+                    key: makeKey(`npb-${item.id}`),
+                    tool_type_id: String(item.tool_type_id),
+                    location_id: item.primary_location_id
+                        ? String(item.primary_location_id)
+                        : "",
+                    received_quantity: Math.min(
+                        100,
+                        Math.max(1, item.quantity),
+                    ),
+                    initial_condition: "baik",
+                    source_npb_id: npb.id,
+                    source_npb_item_id: item.id,
+                    source_reference: npb.reference,
+                })),
         );
         setItems((current) => [...current, ...appended]);
         setForm((current) => ({
@@ -226,10 +231,13 @@ export default function CreateReceipt({
                                 }
                                 disabled={ssoUnavailable}
                             >
-                                <option value="">Pilih user BMT Multi...</option>
+                                <option value="">
+                                    Pilih user BMT Multi...
+                                </option>
                                 {ownerUsers.map((user) => (
                                     <option key={user.id} value={user.id}>
-                                        {user.name || user.username} · {user.username}
+                                        {user.name || user.username} ·{" "}
+                                        {user.username}
                                     </option>
                                 ))}
                             </SearchableSelect>
@@ -282,7 +290,10 @@ export default function CreateReceipt({
                                 className="control min-h-24"
                                 value={form.notes}
                                 onChange={(event) =>
-                                    setForm({ ...form, notes: event.target.value })
+                                    setForm({
+                                        ...form,
+                                        notes: event.target.value,
+                                    })
                                 }
                             />
                         </Field>
@@ -369,7 +380,8 @@ export default function CreateReceipt({
                                     onChange={(event) =>
                                         setComposer({
                                             ...composer,
-                                            initial_condition: event.target.value,
+                                            initial_condition:
+                                                event.target.value,
                                         })
                                     }
                                 >
@@ -395,6 +407,23 @@ export default function CreateReceipt({
                                             ),
                                         })
                                     }
+                                />
+                            </Field>
+                            <Field
+                                label="Nomor PO"
+                                hint="Diterapkan ke semua unit dari ITEM NO ini"
+                            >
+                                <input
+                                    className="control font-num"
+                                    value={composer.source_po_number}
+                                    onChange={(event) =>
+                                        setComposer({
+                                            ...composer,
+                                            source_po_number:
+                                                event.target.value,
+                                        })
+                                    }
+                                    placeholder="Contoh: 0475/WO-PO/04/2026"
                                 />
                             </Field>
                         </div>
@@ -429,14 +458,18 @@ export default function CreateReceipt({
                 </div>
                 {items.length ? (
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[980px] text-left text-sm">
+                        <table className="w-full min-w-[1080px] text-left text-sm">
                             <thead className="border-b border-line bg-canvas font-num text-[10px] uppercase tracking-[.12em] text-muted">
                                 <tr>
                                     <th className="px-4 py-3">Item</th>
-                                    <th className="px-4 py-3">Sumber</th>
+                                    <th className="min-w-64 px-4 py-3">
+                                        Sumber / PO
+                                    </th>
                                     <th className="px-4 py-3">Lokasi awal</th>
                                     <th className="px-4 py-3">Kondisi</th>
-                                    <th className="w-32 px-4 py-3">Qty received</th>
+                                    <th className="w-32 px-4 py-3">
+                                        Qty received
+                                    </th>
                                     <th className="w-16 px-4 py-3" />
                                 </tr>
                             </thead>
@@ -448,7 +481,10 @@ export default function CreateReceipt({
                                             item.tool_type_id,
                                     );
                                     return (
-                                        <tr key={item.key} className="align-middle">
+                                        <tr
+                                            key={item.key}
+                                            className="align-middle"
+                                        >
                                             <td className="px-4 py-4">
                                                 <span className="block font-num text-[10px] font-bold text-green">
                                                     {tool?.code}
@@ -465,6 +501,22 @@ export default function CreateReceipt({
                                                         Manual
                                                     </span>
                                                 )}
+                                                <input
+                                                    className="control mt-2 !min-h-9 font-num text-xs"
+                                                    value={
+                                                        item.source_po_number ??
+                                                        ""
+                                                    }
+                                                    onChange={(event) =>
+                                                        updateItem(
+                                                            item.key,
+                                                            "source_po_number",
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                    placeholder="Nomor PO per ITEM NO"
+                                                    aria-label={`Nomor PO ${tool?.code ?? "item"}`}
+                                                />
                                             </td>
                                             <td className="px-4 py-3">
                                                 <SearchableSelect
@@ -480,20 +532,28 @@ export default function CreateReceipt({
                                                     <option value="">
                                                         Pilih lokasi...
                                                     </option>
-                                                    {locations.map((location) => (
-                                                        <option
-                                                            key={location.id}
-                                                            value={location.id}
-                                                        >
-                                                            {location.name}
-                                                        </option>
-                                                    ))}
+                                                    {locations.map(
+                                                        (location) => (
+                                                            <option
+                                                                key={
+                                                                    location.id
+                                                                }
+                                                                value={
+                                                                    location.id
+                                                                }
+                                                            >
+                                                                {location.name}
+                                                            </option>
+                                                        ),
+                                                    )}
                                                 </SearchableSelect>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <select
                                                     className="control"
-                                                    value={item.initial_condition}
+                                                    value={
+                                                        item.initial_condition
+                                                    }
                                                     onChange={(event) =>
                                                         updateItem(
                                                             item.key,
@@ -502,7 +562,9 @@ export default function CreateReceipt({
                                                         )
                                                     }
                                                 >
-                                                    <option value="baik">Baik</option>
+                                                    <option value="baik">
+                                                        Baik
+                                                    </option>
                                                     <option value="perlu_perhatian">
                                                         Perlu perhatian
                                                     </option>
@@ -517,13 +579,16 @@ export default function CreateReceipt({
                                                     min="1"
                                                     max="100"
                                                     className="control font-num font-bold"
-                                                    value={item.received_quantity}
+                                                    value={
+                                                        item.received_quantity
+                                                    }
                                                     onChange={(event) =>
                                                         updateItem(
                                                             item.key,
                                                             "received_quantity",
                                                             Number(
-                                                                event.target.value,
+                                                                event.target
+                                                                    .value,
                                                             ),
                                                         )
                                                     }
@@ -559,7 +624,9 @@ export default function CreateReceipt({
                             <span className="mx-auto grid size-11 place-items-center rounded-full bg-canvas text-muted">
                                 <ClipboardList size={20} />
                             </span>
-                            <strong className="mt-3 block">Manifest masih kosong</strong>
+                            <strong className="mt-3 block">
+                                Manifest masih kosong
+                            </strong>
                             <p className="mt-1 text-sm text-muted">
                                 Tambahkan item manual atau ambil beberapa NPB.
                             </p>
@@ -603,11 +670,13 @@ export default function CreateReceipt({
             {npbOpen && (
                 <NpbModal
                     npbs={npbs}
-                    existingItemIds={new Set(
-                        items
-                            .map((item) => item.source_npb_item_id)
-                            .filter((id): id is number => Boolean(id)),
-                    )}
+                    existingItemIds={
+                        new Set(
+                            items
+                                .map((item) => item.source_npb_item_id)
+                                .filter((id): id is number => Boolean(id)),
+                        )
+                    }
                     close={() => setNpbOpen(false)}
                     append={appendNpbs}
                 />
@@ -632,7 +701,11 @@ function NpbModal({
     const filtered = useMemo(
         () =>
             npbs.filter((npb) =>
-                [npb.reference, npb.requester, ...npb.items.map((i) => i.item_name)]
+                [
+                    npb.reference,
+                    npb.requester,
+                    ...npb.items.map((i) => i.item_name),
+                ]
                     .join(" ")
                     .toLocaleLowerCase("id")
                     .includes(query.toLocaleLowerCase("id")),
@@ -661,7 +734,9 @@ function NpbModal({
             role="dialog"
             aria-modal="true"
             aria-labelledby="npb-modal-title"
-            onMouseDown={(event) => event.target === event.currentTarget && close()}
+            onMouseDown={(event) =>
+                event.target === event.currentTarget && close()
+            }
         >
             <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-white/15 bg-surface shadow-2xl">
                 <div className="flex items-start justify-between gap-4 bg-ink p-5 text-white sm:p-6">
@@ -782,7 +857,8 @@ function NpbModal({
                                         ))}
                                         {npb.items.length > 3 && (
                                             <small className="block text-muted">
-                                                +{npb.items.length - 3} item lainnya
+                                                +{npb.items.length - 3} item
+                                                lainnya
                                             </small>
                                         )}
                                         {disabled && (
@@ -812,7 +888,11 @@ function NpbModal({
                         ITEM DIPILIH
                     </span>
                     <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={close} className="btn-secondary">
+                        <button
+                            type="button"
+                            onClick={close}
+                            className="btn-secondary"
+                        >
                             Batal
                         </button>
                         <button
@@ -877,8 +957,12 @@ function Field({
         <label className="block">
             <span className="label">{label}</span>
             {children}
-            {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
-            {error && <span className="mt-1 block text-xs text-red">{error}</span>}
+            {hint && (
+                <span className="mt-1 block text-xs text-muted">{hint}</span>
+            )}
+            {error && (
+                <span className="mt-1 block text-xs text-red">{error}</span>
+            )}
         </label>
     );
 }
