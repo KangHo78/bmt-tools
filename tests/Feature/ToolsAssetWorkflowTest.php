@@ -451,6 +451,34 @@ class ToolsAssetWorkflowTest extends TestCase
                     && $row['owner_sso_user_id'] === $unit->owner_sso_user_id)));
     }
 
+    public function test_reports_include_active_users_and_borrowed_item_details(): void
+    {
+        $head = User::where('email', 'kepala@tams.id')->firstOrFail();
+
+        $this->actingAs($head)->get(route('reports.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Operations/Reports')
+                ->where('summary.active_users', fn ($value) => (int) $value > 0)
+                ->has('activeUsage', fn (Assert $rows) => $rows
+                    ->each(fn (Assert $row) => $row
+                        ->hasAll(['id', 'trx_no', 'borrower', 'usage_type', 'location_text', 'due_date', 'status', 'items'])
+                        ->where('items', fn ($items) => collect($items)->isNotEmpty())
+                    ))
+                ->has('borrowedByItem', fn (Assert $rows) => $rows
+                    ->each(fn (Assert $row) => $row
+                        ->hasAll(['tool_type_id', 'name', 'code', 'total_borrowed', 'units'])
+                        ->where('units', fn ($units) => collect($units)->isNotEmpty())
+                    )));
+
+        $this->get(route('reports.export', 'active-users'))
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $this->get(route('reports.export', 'borrowed-items'))
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+    }
+
     public function test_operational_reset_removes_assets_and_transactions_but_preserves_master_support_data(): void
     {
         $preserved = [
