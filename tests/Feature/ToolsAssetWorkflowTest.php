@@ -54,6 +54,31 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->assertSame($before + 1, $user->fresh()->token_used);
     }
 
+    public function test_user_can_borrow_multiple_units_of_the_same_tool_type(): void
+    {
+        $user = User::where('email', 'andi@tams.id')->firstOrFail();
+        $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $units = $type->units()->where('status', 'tersedia')->limit(2)->get();
+        $tokens = $user->borrower->tokens()->where('status', 'dipegang_peminjam')->limit(2)->get();
+
+        $response = $this->actingAs($user)->post(route('loans.store'), [
+            'tool_type_ids' => [$type->id, $type->id],
+            'tool_unit_ids' => [$units[0]->id, $units[1]->id],
+            'usage_type' => 'dalam_area',
+            'purpose' => 'Pekerjaan yang membutuhkan dua gerinda',
+            'location_text' => 'Workshop Trowulan',
+            'start_date' => now()->addDay()->toDateString(),
+            'token_codes' => [$tokens[0]->code, $tokens[1]->code],
+        ]);
+
+        $loan = Loan::latest('id')->firstOrFail();
+        $response->assertRedirect(route('loans.show', $loan));
+        $this->assertSame(2, $loan->tokens_used);
+        $this->assertSame(2, $loan->items()->where('tool_type_id', $type->id)->count());
+        $this->assertSame(2, $loan->items()->distinct()->count('unit_id'));
+        $this->assertSame(2, $loan->items()->distinct()->count('physical_token_id'));
+    }
+
     public function test_user_can_open_new_loan_form_with_available_tools(): void
     {
         $user = User::where('email', 'user@tams.id')->firstOrFail();
@@ -66,6 +91,7 @@ class ToolsAssetWorkflowTest extends TestCase
                 ->component('Loans/Create')
                 ->has('tools')
                 ->has('logisticsApprovers')
+                ->where('tools', fn ($tools) => collect($tools)->every(fn ($tool) => count($tool['available_units']) === (int) $tool['available_count']))
                 ->where('tools', fn ($tools) => collect($tools)->contains(fn ($tool) => $tool['code'] === 'TWL-DRL' && $tool['approval_owner_sso_user_id'] === null)
                     && collect($tools)->contains(fn ($tool) => filled($tool['approval_owner_sso_user_id'])))
                 ->where('tools.0.available_count', fn ($count) => (int) $count > 0));
@@ -236,6 +262,55 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->actingAs($head)->post(route('loans.approve', $loan))->assertRedirect();
         $this->assertSame('disetujui', $loan->fresh()->status);
         $this->assertSame($head->id, $loan->fresh()->approved_by_id);
+    }
+
+    public function test_admin_can_skip_owner_approval_for_external_loans(): void
+    {
+        $admin = User::where('email', 'admin@tams.id')->firstOrFail();
+        $head = User::where('email', 'kepala@tams.id')->firstOrFail();
+        $user = User::where('email', 'andi@tams.id')->firstOrFail();
+
+        $this->actingAs($admin)->post(route('admin.approvers.update'), [
+            'user_ids' => [$head->id],
+            'outside_owner_approval_required' => false,
+            'reason' => 'Owner approval tidak diperlukan untuk operasional ini',
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('system_settings', [
+            'key' => 'outside_owner_approval_required',
+            'value' => 'false',
+        ]);
+
+        $type = ToolType::where('code', 'TWL-GRD')->firstOrFail();
+        $unit = $type->units()->where('status', 'tersedia')->firstOrFail();
+        $unit->update(['owner' => null, 'owner_sso_user_id' => null]);
+        $token = $user->borrower->tokens()->where('status', 'dipegang_peminjam')->firstOrFail();
+
+        $this->actingAs($user)->post(route('loans.store'), [
+            'tool_type_ids' => [$type->id],
+            'tool_unit_ids' => [$type->id => $unit->id],
+            'usage_type' => 'luar_area',
+            'purpose' => 'Pekerjaan luar tanpa approval owner',
+            'location_text' => 'Surabaya',
+            'start_date' => now()->addDay()->toDateString(),
+            'due_date' => now()->addWeek()->toDateString(),
+            'letter' => UploadedFile::fake()->create('surat.pdf', 100, 'application/pdf'),
+            'token_codes' => [$type->id => $token->code],
+        ])->assertRedirect();
+
+        $loan = Loan::latest('id')->firstOrFail();
+        $this->assertDatabaseMissing('loan_approvals', [
+            'loan_id' => $loan->id,
+            'type' => 'owner',
+        ]);
+        $this->assertDatabaseHas('loan_approvals', [
+            'loan_id' => $loan->id,
+            'type' => 'logistik',
+            'status' => 'menunggu',
+        ]);
+
+        $this->actingAs($head)->post(route('loans.approve', $loan))->assertRedirect();
+        $this->assertSame('disetujui', $loan->fresh()->status);
     }
 
     public function test_admin_can_choose_exactly_who_may_approve(): void

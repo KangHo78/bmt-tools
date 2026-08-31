@@ -29,9 +29,10 @@ class LoanService
     {
         return DB::transaction(function () use ($borrower, $data, $letter, $createdBy, $allowTokenRegistration) {
             $borrower = Borrower::query()->lockForUpdate()->findOrFail($borrower->id);
-            $typeIds = array_values(array_unique($data['tool_type_ids']));
+            $typeIds = $data['tool_type_ids'];
             $needed = count($typeIds);
             $outside = $data['usage_type'] === 'luar_area';
+            $ownerApprovalRequired = $outside && $this->approvalConfiguration->ownerApprovalRequired();
             $tokenCodes = collect($data['token_codes'] ?? [])->map(fn ($code) => mb_strtoupper(trim((string) $code)));
             if ($tokenCodes->count() !== $needed || $tokenCodes->filter()->count() !== $needed) {
                 throw ValidationException::withMessages(['token_codes' => 'Setiap alat wajib ditukar dengan satu kode token fisik.']);
@@ -40,19 +41,21 @@ class LoanService
                 throw ValidationException::withMessages(['token_codes' => 'Satu token fisik tidak dapat digunakan untuk dua alat.']);
             }
             $reservedUnits = [];
-            foreach ($typeIds as $typeId) {
-                $unitId = $data['tool_unit_ids'][$typeId] ?? null;
+            foreach ($typeIds as $lineKey => $typeId) {
+                $unitId = $data['tool_unit_ids'][$lineKey]
+                    ?? $data['tool_unit_ids'][$typeId]
+                    ?? null;
                 $unit = ToolUnit::query()->whereKey($unitId)->where('tool_type_id', $typeId)
                     ->where('status', 'tersedia')
-                    ->when($outside, fn ($query) => $query->whereNotNull('owner_sso_user_id'))
+                    ->when($ownerApprovalRequired, fn ($query) => $query->whereNotNull('owner_sso_user_id'))
                     ->lockForUpdate()->first();
                 if (! $unit) {
-                    $message = $outside
+                    $message = $ownerApprovalRequired
                         ? 'Unit sudah tidak tersedia atau belum memiliki owner. Pilih ulang alat untuk memperbarui owner approval.'
                         : 'Unit yang dipilih sudah tidak tersedia. Pilih ulang alat.';
                     throw ValidationException::withMessages(['tool_unit_ids' => $message]);
                 }
-                $reservedUnits[$typeId] = $unit;
+                $reservedUnits[$lineKey] = $unit;
             }
 
             $due = $outside ? Carbon::parse($data['due_date'])->endOfDay() : $this->nearestFriday(Carbon::parse($data['start_date']));
@@ -72,28 +75,31 @@ class LoanService
                 'letter_url' => $letter?->store('loan-letters', 'public'),
                 'tokens_used' => $needed,
             ]);
-            foreach ($typeIds as $typeId) {
-                $code = $tokenCodes->get((string) $typeId) ?? $tokenCodes->get($typeId);
+            foreach ($typeIds as $lineKey => $typeId) {
+                $code = $tokenCodes->get((string) $lineKey)
+                    ?? $tokenCodes->get($lineKey)
+                    ?? $tokenCodes->get((string) $typeId)
+                    ?? $tokenCodes->get($typeId);
                 $token = PhysicalToken::query()->lockForUpdate()->where('code', $code)->first();
                 if (! $token && $allowTokenRegistration) {
                     $token = PhysicalToken::create(['borrower_id' => $borrower->id, 'code' => $code, 'status' => 'dipegang_peminjam']);
                 }
                 if (! $token) {
-                    throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} belum terdaftar. Hubungi petugas."]);
+                    throw ValidationException::withMessages(["token_codes.{$lineKey}" => "Token {$code} belum terdaftar. Hubungi petugas."]);
                 }
                 if ($token->borrower_id !== $borrower->id) {
-                    throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} terdaftar atas nama peminjam lain."]);
+                    throw ValidationException::withMessages(["token_codes.{$lineKey}" => "Token {$code} terdaftar atas nama peminjam lain."]);
                 }
                 if ($token->status !== 'dipegang_peminjam') {
-                    throw ValidationException::withMessages(["token_codes.{$typeId}" => "Token {$code} sedang digunakan atau tidak aktif."]);
+                    throw ValidationException::withMessages(["token_codes.{$lineKey}" => "Token {$code} sedang digunakan atau tidak aktif."]);
                 }
-                $unit = $reservedUnits[$typeId];
+                $unit = $reservedUnits[$lineKey];
                 $loan->items()->create(['tool_type_id' => $typeId, 'physical_token_id' => $token->id, 'unit_id' => $unit->id]);
                 $token->update(['status' => 'direservasi']);
                 $unit->update(['status' => 'direservasi']);
             }
             $ownerUsers = collect();
-            if ($outside) {
+            if ($ownerApprovalRequired) {
                 $ownerSsoIds = collect($reservedUnits)->pluck('owner_sso_user_id')->unique()->values();
                 $ownerUsers = $this->ownerUsers($ownerSsoIds);
                 if ($ownerUsers->count() !== $ownerSsoIds->count()) {
@@ -103,7 +109,9 @@ class LoanService
                 foreach ($ownerSsoIds as $ownerSsoId) {
                     $loan->approvals()->create(['type' => 'owner', 'required_sso_user_id' => $ownerSsoId, 'required_user_id' => $ownerUsersBySsoId[$ownerSsoId]->id, 'status' => 'menunggu']);
                 }
-                $loan->approvals()->create(['type' => 'logistik', 'status' => 'tertunda']);
+            }
+            if ($outside) {
+                $loan->approvals()->create(['type' => 'logistik', 'status' => $ownerApprovalRequired ? 'tertunda' : 'menunggu']);
             }
             $borrower->user?->increment('token_used', $needed);
             $this->log($createdBy, 'loan.created', $loan, [
@@ -111,15 +119,20 @@ class LoanService
                 'borrower_id' => $borrower->id,
                 'created_on_behalf' => ! $borrower->user?->is($createdBy),
                 'requires_approval' => $outside,
+                'requires_owner_approval' => $ownerApprovalRequired,
             ]);
 
             if ($borrower->user && ! $borrower->user->is($createdBy)) {
                 $this->notify($loan, 'Peminjaman dibuat atas nama Anda', "{$createdBy->name} membuat {$loan->trx_no} untuk Anda.");
             }
 
-            if ($outside) {
+            if ($ownerApprovalRequired) {
                 foreach ($ownerUsers as $owner) {
                     $this->notifyApprover($loan, $owner, 'Persetujuan owner diperlukan', "{$borrower->name} mengajukan peminjaman aset milik Anda.");
+                }
+            } elseif ($outside) {
+                foreach ($this->approvalConfiguration->approvers() as $logisticsApprover) {
+                    $this->notifyApprover($loan, $logisticsApprover, 'Persetujuan Kepala Logistik diperlukan', "{$borrower->name} mengajukan peminjaman luar workshop.");
                 }
             }
 

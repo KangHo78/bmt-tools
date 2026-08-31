@@ -43,6 +43,7 @@ export default function Admin(props: {
     settings: any[];
     approvalCandidates: any[];
     approvalUserIds: number[];
+    outsideOwnerApprovalRequired: boolean;
 }) {
     const [tab, setTab] = useState("users");
     const tabs = [
@@ -94,6 +95,9 @@ export default function Admin(props: {
                 <ApproversTab
                     candidates={props.approvalCandidates}
                     initialIds={props.approvalUserIds}
+                    initialOwnerApprovalRequired={
+                        props.outsideOwnerApprovalRequired
+                    }
                 />
             )}{" "}
             {tab === "settings" && <SettingsTab settings={props.settings} />}{" "}
@@ -104,11 +108,17 @@ export default function Admin(props: {
 function ApproversTab({
     candidates,
     initialIds,
+    initialOwnerApprovalRequired,
 }: {
     candidates: any[];
     initialIds: number[];
+    initialOwnerApprovalRequired: boolean;
 }) {
-    const form = useForm({ user_ids: initialIds, reason: "" });
+    const form = useForm({
+        user_ids: initialIds,
+        outside_owner_approval_required: initialOwnerApprovalRequired,
+        reason: "",
+    });
     const toggle = (id: number) => {
         form.setData(
             "user_ids",
@@ -140,6 +150,47 @@ function ApproversTab({
                             </p>
                         </div>
                     </div>
+                </div>
+                <div className="border-b border-line bg-canvas p-5">
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={form.data.outside_owner_approval_required}
+                        onClick={() =>
+                            form.setData(
+                                "outside_owner_approval_required",
+                                !form.data.outside_owner_approval_required,
+                            )
+                        }
+                        className={`grid w-full gap-4 rounded-lg border p-4 text-left transition sm:grid-cols-[auto_1fr_auto] sm:items-center ${form.data.outside_owner_approval_required ? "border-green bg-green/10" : "border-amber/45 bg-amber/10"}`}
+                    >
+                        <span
+                            className={`grid size-11 place-items-center rounded-md ${form.data.outside_owner_approval_required ? "bg-green text-white" : "bg-amber text-ink"}`}
+                        >
+                            <ShieldCheck size={21} />
+                        </span>
+                        <span>
+                            <span className="font-num text-[10px] font-bold uppercase tracking-[.16em] text-muted">
+                                Peminjaman luar workshop · Approval 01
+                            </span>
+                            <strong className="mt-1 block font-display text-xl">
+                                Wajib approval Owner Item
+                            </strong>
+                            <small className="mt-1 block leading-relaxed text-muted">
+                                {form.data.outside_owner_approval_required
+                                    ? "Permohonan harus disetujui owner sebelum diteruskan ke Kepala Logistik."
+                                    : "Tahap owner dilewati; permohonan langsung menunggu Kepala Logistik."}
+                            </small>
+                        </span>
+                        <span
+                            aria-hidden="true"
+                            className={`relative h-7 w-12 rounded-full border transition-colors ${form.data.outside_owner_approval_required ? "border-green bg-green" : "border-line bg-surface"}`}
+                        >
+                            <span
+                                className={`absolute top-1 size-5 rounded-full bg-white shadow transition-transform ${form.data.outside_owner_approval_required ? "translate-x-6" : "translate-x-1"}`}
+                            />
+                        </span>
+                    </button>
                 </div>
                 <div className="divide-y">
                     {candidates.map((user) => {
@@ -184,8 +235,9 @@ function ApproversTab({
                     Simpan Kewenangan
                 </h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted">
-                    Minimal satu approver wajib aktif agar permohonan tidak
-                    tertahan tanpa pengambil keputusan.
+                    Minimal satu approver Kepala Logistik wajib aktif. Approval
+                    owner dapat diwajibkan atau dilewati melalui aturan di
+                    samping.
                 </p>
                 <div className="mt-5">
                     <Input

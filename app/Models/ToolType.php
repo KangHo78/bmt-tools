@@ -52,6 +52,14 @@ class ToolType extends Model
         return $this->hasMany(ToolUnit::class);
     }
 
+    public function availableUnits()
+    {
+        return $this->hasMany(ToolUnit::class)
+            ->where('status', 'tersedia')
+            ->orderByRaw('CASE WHEN owner_sso_user_id IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('id');
+    }
+
     public function checklistItems()
     {
         return $this->belongsToMany(ChecklistItem::class)

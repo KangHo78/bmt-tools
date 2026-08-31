@@ -63,6 +63,7 @@ class LoanController extends Controller
         return Inertia::render('Loans/Create', [
             'tools' => ToolType::query()
                 ->whereHas('units', fn ($query) => $query->where('status', 'tersedia'))
+                ->with('availableUnits:id,tool_type_id,asset_code,owner,owner_sso_user_id')
                 ->withCount(['units as available_count' => fn ($query) => $query->where('status', 'tersedia')])
                 ->addSelect([
                     'approval_unit_id' => ToolUnit::query()->select('id')->whereColumn('tool_type_id', 'tool_types.id')->where('status', 'tersedia')->orderByRaw('CASE WHEN owner_sso_user_id IS NULL THEN 1 ELSE 0 END')->orderBy('id')->limit(1),
@@ -73,6 +74,7 @@ class LoanController extends Controller
                 ->orderBy('name')
                 ->get(),
             'logisticsApprovers' => $this->approvalConfiguration->approvers()->map->only(['id', 'name'])->values(),
+            'outsideOwnerApprovalRequired' => $this->approvalConfiguration->ownerApprovalRequired(),
             'preselected' => array_filter([(int) $request->query('tool')]),
             'canChooseBorrower' => $canChooseBorrower,
             'selectedBorrowerId' => $ownBorrower->id,
@@ -89,7 +91,7 @@ class LoanController extends Controller
     {
         $canChooseBorrower = $request->user()->hasRole('petugas', 'admin');
         $data = $request->validate([
-            'tool_type_ids' => ['required', 'array', 'min:1'], 'tool_type_ids.*' => ['integer', 'distinct', 'exists:tool_types,id'],
+            'tool_type_ids' => ['required', 'array', 'min:1'], 'tool_type_ids.*' => ['integer', 'exists:tool_types,id'],
             'tool_unit_ids' => ['required', 'array', 'min:1'], 'tool_unit_ids.*' => ['integer', 'distinct', 'exists:tool_units,id'],
             'usage_type' => ['required', Rule::in(['dalam_area', 'luar_area'])], 'purpose' => ['required', 'string', 'max:1000'],
             'location_text' => ['required', 'string', 'max:255'], 'start_date' => ['required', 'date', 'after_or_equal:today'],

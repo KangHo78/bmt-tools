@@ -32,9 +32,10 @@ class AdminController extends Controller
             'categories' => Category::orderBy('name')->get(), 'locations' => Location::withCount('units')->with('parent:id,name')->orderBy('name')->get(),
             'toolTypes' => ToolType::with(['category:id,name', 'primaryLocation:id,name', 'checklistItems:id,name'])->orderBy('name')->get(),
             'checklistItems' => ChecklistItem::withCount('toolTypes')->orderBy('name')->get(),
-            'settings' => SystemSetting::where('key', '!=', ApprovalConfiguration::SETTING_KEY)->orderBy('key')->get(),
+            'settings' => SystemSetting::whereNotIn('key', [ApprovalConfiguration::SETTING_KEY, ApprovalConfiguration::OWNER_APPROVAL_REQUIRED_KEY])->orderBy('key')->get(),
             'approvalCandidates' => $approvalConfiguration->eligibleQuery()->orderBy('name')->get(['id', 'name', 'email', 'role', 'institution']),
             'approvalUserIds' => $approvalConfiguration->approverIds(),
+            'outsideOwnerApprovalRequired' => $approvalConfiguration->ownerApprovalRequired(),
             'masterItems' => SsoItem::tools()->orderBy('item_no')->get([
                 'id', 'item_no', 'item_name', 'manufacture_pn', 'original_manufacture', 'article_no', 'unit',
             ]),
@@ -377,6 +378,7 @@ class AdminController extends Controller
         $data = $request->validate([
             'user_ids' => ['required', 'array', 'min:1'],
             'user_ids.*' => ['required', 'integer', 'distinct'],
+            'outside_owner_approval_required' => ['sometimes', 'boolean'],
             'reason' => ['required', 'string', 'min:5', 'max:500'],
         ]);
 
@@ -401,8 +403,20 @@ class AdminController extends Controller
                 'description' => 'Daftar pengguna yang berwenang menyetujui atau menolak permohonan',
             ],
         );
+
+        if (array_key_exists('outside_owner_approval_required', $data)) {
+            SystemSetting::updateOrCreate(
+                ['key' => ApprovalConfiguration::OWNER_APPROVAL_REQUIRED_KEY],
+                [
+                    'value' => $data['outside_owner_approval_required'] ? 'true' : 'false',
+                    'type' => 'boolean',
+                    'description' => 'Menentukan apakah peminjaman luar workshop wajib melalui approval owner item',
+                ],
+            );
+        }
         AuditLogger::record('approval.approvers_updated', $setting, [
             'user_ids' => $validIds,
+            'outside_owner_approval_required' => $data['outside_owner_approval_required'] ?? $approvalConfiguration->ownerApprovalRequired(),
             'reason' => $data['reason'],
         ]);
 

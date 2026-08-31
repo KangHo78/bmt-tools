@@ -11,6 +11,21 @@ class ApprovalConfiguration
 {
     public const SETTING_KEY = 'approval_user_ids';
 
+    public const OWNER_APPROVAL_REQUIRED_KEY = 'outside_owner_approval_required';
+
+    public function ownerApprovalRequired(): bool
+    {
+        $value = SystemSetting::query()
+            ->where('key', self::OWNER_APPROVAL_REQUIRED_KEY)
+            ->value('value');
+
+        if ($value === null) {
+            return true;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+
     public function isApprover(?User $user): bool
     {
         return $user !== null

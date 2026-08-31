@@ -86,7 +86,7 @@ export default function TamsLayout({ children }: PropsWithChildren) {
                                 TAMS
                             </div>
                             <div className="mt-1 text-[9px] uppercase tracking-[.2em] text-white/55">
-                                Workshop Trowulan
+                                Tracking Tools
                             </div>
                         </div>
                     </Link>

@@ -6,14 +6,17 @@ import {
     FileText,
     KeyRound,
     MapPin,
+    Minus,
     PackagePlus,
+    Plus,
+    Search,
     ShieldCheck,
     UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
 import SearchableSelect from "@/Components/SearchableSelect";
-import { AssetGlyph, PageHeader, Panel } from "@/Components/TamsUI";
+import { AssetVisual, PageHeader, Panel } from "@/Components/TamsUI";
 import type { ToolType } from "@/types/tams";
 
 type Borrower = {
@@ -32,6 +35,19 @@ type LoanTool = ToolType & {
     approval_unit_code: string;
     approval_owner?: string;
     approval_owner_sso_user_id?: number;
+    available_units: Array<{
+        id: number;
+        asset_code: string;
+        owner?: string;
+        owner_sso_user_id?: number;
+    }>;
+};
+
+type ChosenLine = {
+    key: string;
+    tool: LoanTool;
+    unit: LoanTool["available_units"][number];
+    ordinal: number;
 };
 
 export default function Create({
@@ -41,6 +57,7 @@ export default function Create({
     canChooseBorrower,
     selectedBorrowerId,
     logisticsApprovers,
+    outsideOwnerApprovalRequired,
 }: {
     tools: LoanTool[];
     preselected: number[];
@@ -48,9 +65,14 @@ export default function Create({
     canChooseBorrower: boolean;
     selectedBorrowerId: number;
     logisticsApprovers: { id: number; name: string }[];
+    outsideOwnerApprovalRequired: boolean;
 }) {
     const [step, setStep] = useState(1),
-        [selected, setSelected] = useState<number[]>(preselected);
+        [selected, setSelected] = useState<number[]>(preselected),
+        [quantities, setQuantities] = useState<Record<number, number>>(
+            Object.fromEntries(preselected.map((id) => [id, 1])),
+        ),
+        [toolQuery, setToolQuery] = useState("");
     const [usage, setUsage] = useState<"dalam_area" | "luar_area">(
         "dalam_area",
     );
@@ -67,13 +89,36 @@ export default function Create({
             institution: "",
             phone: "",
         }),
-        [tokenCodes, setTokenCodes] = useState<Record<number, string>>({});
+        [tokenCodes, setTokenCodes] = useState<Record<string, string>>({});
     const [errors, setErrors] = useState<Record<string, string>>({}),
         [processing, setProcessing] = useState(false);
     const chosen = useMemo(
             () => tools.filter((t) => selected.includes(t.id)),
             [selected, tools],
         ),
+        chosenLines = useMemo<ChosenLine[]>(
+            () =>
+                chosen.flatMap((tool) =>
+                    tool.available_units
+                        .slice(0, quantities[tool.id] ?? 1)
+                        .map((unit, index) => ({
+                            key: `${tool.id}-${index}`,
+                            tool,
+                            unit,
+                            ordinal: index + 1,
+                        })),
+                ),
+            [chosen, quantities],
+        ),
+        filteredTools = useMemo(() => {
+            const query = toolQuery.trim().toLocaleLowerCase("id-ID");
+            if (!query) return tools;
+            return tools.filter((tool) =>
+                `${tool.code} ${tool.name}`
+                    .toLocaleLowerCase("id-ID")
+                    .includes(query),
+            );
+        }, [toolQuery, tools]),
         borrower = borrowers.find((b) => b.id === borrowerId);
     const availableTokens =
         borrower?.tokens.filter(
@@ -82,16 +127,43 @@ export default function Create({
     const toggle = (id: number) => {
         if (selected.includes(id)) {
             setTokenCodes((codes) => {
-                const next = { ...codes };
+                return Object.fromEntries(
+                    Object.entries(codes).filter(
+                        ([key]) => !key.startsWith(`${id}-`),
+                    ),
+                );
+            });
+            setQuantities((current) => {
+                const next = { ...current };
                 delete next[id];
                 return next;
             });
+        } else {
+            setQuantities((current) => ({ ...current, [id]: 1 }));
         }
         setSelected((items) =>
             items.includes(id)
                 ? items.filter((item) => item !== id)
                 : [...items, id],
         );
+    };
+    const changeQuantity = (tool: LoanTool, delta: number) => {
+        const current = quantities[tool.id] ?? 1;
+        const next = Math.min(
+            tool.available_units.length,
+            Math.max(1, current + delta),
+        );
+        setQuantities((values) => ({ ...values, [tool.id]: next }));
+        if (next < current) {
+            setTokenCodes((codes) =>
+                Object.fromEntries(
+                    Object.entries(codes).filter(([key]) => {
+                        const [typeId, index] = key.split("-").map(Number);
+                        return typeId !== tool.id || index < next;
+                    }),
+                ),
+            );
+        }
     };
     const changeBorrower = (value: string) => {
         setTokenCodes({});
@@ -104,15 +176,10 @@ export default function Create({
     };
     const submit = () => {
         const data = new FormData();
-        selected.forEach((id) => {
-            const tool = tools.find((item) => item.id === id);
-            data.append("tool_type_ids[]", String(id));
-            if (tool)
-                data.append(
-                    `tool_unit_ids[${id}]`,
-                    String(tool.approval_unit_id),
-                );
-            data.append(`token_codes[${id}]`, tokenCodes[id] || "");
+        chosenLines.forEach((line, index) => {
+            data.append(`tool_type_ids[${index}]`, String(line.tool.id));
+            data.append(`tool_unit_ids[${index}]`, String(line.unit.id));
+            data.append(`token_codes[${index}]`, tokenCodes[line.key] || "");
         });
         data.append("usage_type", usage);
         data.append("purpose", purpose);
@@ -281,24 +348,61 @@ export default function Create({
                                 Pilih Jenis Alat
                             </h2>
                             <p className="text-sm text-muted">
-                                Satu jenis alat membutuhkan satu token fisik.
+                                Setiap unit alat membutuhkan satu token fisik.
                             </p>
+                            <label className="relative mt-4 block">
+                                <Search
+                                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+                                    size={17}
+                                />
+                                <input
+                                    type="search"
+                                    className="control pl-10"
+                                    value={toolQuery}
+                                    onChange={(event) =>
+                                        setToolQuery(event.target.value)
+                                    }
+                                    placeholder="Cari kode atau nama barang..."
+                                    aria-label="Cari kode atau nama barang"
+                                />
+                            </label>
                         </div>
                         <div className="grid gap-3 p-4 sm:grid-cols-2">
-                            {tools.map((tool) => {
+                            {filteredTools.map((tool) => {
                                 const active = selected.includes(tool.id);
-                                const hasOwner = Boolean(
-                                    tool.approval_owner_sso_user_id,
+                                const quantity = quantities[tool.id] ?? 1;
+                                const selectedUnits =
+                                    tool.available_units.slice(0, quantity);
+                                const hasOwner = selectedUnits.every((unit) =>
+                                    Boolean(unit.owner_sso_user_id),
                                 );
                                 return (
-                                    <button
-                                        type="button"
+                                    <div
                                         key={tool.id}
                                         onClick={() => toggle(tool.id)}
-                                        className={`overflow-hidden rounded-lg border text-left ${active ? "border-green ring-2 ring-green/15" : "bg-white hover:border-ink"}`}
+                                        onKeyDown={(event) => {
+                                            if (
+                                                event.key === "Enter" ||
+                                                event.key === " "
+                                            ) {
+                                                event.preventDefault();
+                                                toggle(tool.id);
+                                            }
+                                        }}
+                                        role="checkbox"
+                                        aria-checked={active}
+                                        tabIndex={0}
+                                        className={`group cursor-pointer overflow-hidden rounded-lg border text-left transition ${active ? "border-green ring-2 ring-green/15" : "bg-white hover:border-ink"}`}
                                     >
                                         <div className="grid grid-cols-[92px_1fr]">
-                                            <AssetGlyph code={tool.code} />
+                                            <AssetVisual
+                                                code={tool.code}
+                                                imageUrl={
+                                                    tool.catalog_image_url
+                                                }
+                                                alt={tool.name}
+                                                className="h-full !aspect-auto min-h-[112px]"
+                                            />
                                             <div className="p-3">
                                                 <p className="font-num text-[10px] text-muted">
                                                     {tool.code}
@@ -310,22 +414,83 @@ export default function Create({
                                                     {tool.available_count}{" "}
                                                     tersedia
                                                 </p>
-                                                {!hasOwner && (
-                                                    <p className="mt-1 text-xs font-semibold text-red">
-                                                        Hanya dapat dipinjam di dalam workshop
-                                                    </p>
-                                                )}
+                                                {outsideOwnerApprovalRequired &&
+                                                    !hasOwner && (
+                                                        <p className="mt-1 text-xs font-semibold text-red">
+                                                            Hanya dapat dipinjam
+                                                            di dalam workshop
+                                                        </p>
+                                                    )}
                                             </div>
                                         </div>
                                         {active && (
-                                            <div className="flex items-center gap-2 bg-green px-3 py-2 text-xs font-bold text-white">
-                                                <Check size={14} />
-                                                Dipilih · 1 token fisik
+                                            <div className="flex items-center justify-between gap-3 bg-green px-3 py-2 text-xs font-bold text-white">
+                                                <span className="flex items-center gap-2">
+                                                    <Check size={14} />
+                                                    Dipilih · {quantity} token
+                                                    fisik
+                                                </span>
+                                                <span
+                                                    className="flex items-center overflow-hidden rounded border border-white/35 bg-white/10"
+                                                    onClick={(event) =>
+                                                        event.stopPropagation()
+                                                    }
+                                                    onKeyDown={(event) =>
+                                                        event.stopPropagation()
+                                                    }
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            changeQuantity(
+                                                                tool,
+                                                                -1,
+                                                            )
+                                                        }
+                                                        disabled={quantity <= 1}
+                                                        className="grid size-8 place-items-center hover:bg-white/15 disabled:opacity-35"
+                                                        aria-label={`Kurangi jumlah ${tool.name}`}
+                                                    >
+                                                        <Minus size={14} />
+                                                    </button>
+                                                    <output className="grid min-w-9 place-items-center border-x border-white/35 px-2 font-num text-sm">
+                                                        {quantity}
+                                                    </output>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            changeQuantity(
+                                                                tool,
+                                                                1,
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            quantity >=
+                                                            tool.available_units
+                                                                .length
+                                                        }
+                                                        className="grid size-8 place-items-center hover:bg-white/15 disabled:opacity-35"
+                                                        aria-label={`Tambah jumlah ${tool.name}`}
+                                                    >
+                                                        <Plus size={14} />
+                                                    </button>
+                                                </span>
                                             </div>
                                         )}
-                                    </button>
+                                    </div>
                                 );
                             })}
+                            {!filteredTools.length && (
+                                <div className="rounded-lg border border-dashed border-line bg-canvas p-8 text-center sm:col-span-2">
+                                    <p className="font-display text-xl font-bold">
+                                        Barang tidak ditemukan
+                                    </p>
+                                    <p className="mt-1 text-sm text-muted">
+                                        Coba gunakan kode atau nama barang yang
+                                        berbeda.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                         {errors.tool_type_ids && (
                             <p className="px-5 pb-4 text-sm text-red">
@@ -364,7 +529,11 @@ export default function Create({
                             onClick={() => setUsage("luar_area")}
                             icon={FileText}
                             title="Luar Workshop"
-                            desc="Memerlukan periode, surat, approval owner, dan Kepala Logistik."
+                            desc={
+                                outsideOwnerApprovalRequired
+                                    ? "Memerlukan periode, surat, approval owner, dan Kepala Logistik."
+                                    : "Memerlukan periode, surat, dan approval Kepala Logistik. Approval owner dilewati."
+                            }
                         />
                     </div>
                     <Actions back={() => setStep(1)} next={() => setStep(3)} />
@@ -446,39 +615,54 @@ export default function Create({
                                         Jalur persetujuan
                                     </p>
                                     <h3 className="font-display text-xl font-bold">
-                                        Dua tahap sebelum alat diserahkan
+                                        {outsideOwnerApprovalRequired
+                                            ? "Dua tahap sebelum alat diserahkan"
+                                            : "Langsung ke Kepala Logistik"}
                                     </h3>
                                 </div>
                             </div>
                             <div className="grid md:grid-cols-2">
                                 <div className="border-b border-line p-5 md:border-b-0 md:border-r">
-                                    <p className="font-num text-[10px] font-bold uppercase tracking-wider text-green">
-                                        Approval 01
+                                    <p
+                                        className={`font-num text-[10px] font-bold uppercase tracking-wider ${outsideOwnerApprovalRequired ? "text-green" : "text-muted"}`}
+                                    >
+                                        {outsideOwnerApprovalRequired
+                                            ? "Approval 01"
+                                            : "Tahap dilewati"}
                                     </p>
                                     <h4 className="mt-1 font-display text-xl font-bold">
                                         Owner Aset
                                     </h4>
-                                    <div className="mt-3 space-y-2">
-                                        {chosen.map((tool) => (
-                                            <div
-                                                key={tool.id}
-                                                className="rounded border bg-surface px-3 py-2"
-                                            >
-                                                <p className="text-xs font-semibold">
-                                                    {tool.approval_owner ||
-                                                        "Owner belum ditetapkan"}
-                                                </p>
-                                                <p className="mt-0.5 font-num text-[10px] text-muted">
-                                                    {tool.name} ·{" "}
-                                                    {tool.approval_unit_code}
-                                                </p>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    {outsideOwnerApprovalRequired ? (
+                                        <div className="mt-3 space-y-2">
+                                            {chosenLines.map((line) => (
+                                                <div
+                                                    key={line.key}
+                                                    className="rounded border bg-surface px-3 py-2"
+                                                >
+                                                    <p className="text-xs font-semibold">
+                                                        {line.unit.owner ||
+                                                            "Owner belum ditetapkan"}
+                                                    </p>
+                                                    <p className="mt-0.5 font-num text-[10px] text-muted">
+                                                        {line.tool.name} ·{" "}
+                                                        {line.unit.asset_code}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="mt-3 rounded border border-dashed border-line bg-surface px-3 py-3 text-xs leading-relaxed text-muted">
+                                            Dinonaktifkan melalui konfigurasi
+                                            administrasi.
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="p-5">
                                     <p className="font-num text-[10px] font-bold uppercase tracking-wider text-amber-ink">
-                                        Approval 02
+                                        {outsideOwnerApprovalRequired
+                                            ? "Approval 02"
+                                            : "Approval akhir"}
                                     </p>
                                     <h4 className="mt-1 font-display text-xl font-bold">
                                         Kepala Logistik
@@ -491,8 +675,9 @@ export default function Create({
                                             : "Belum dikonfigurasi"}
                                     </p>
                                     <p className="mt-2 text-xs leading-relaxed text-muted">
-                                        Tahap ini aktif setelah seluruh owner
-                                        aset menyetujui.
+                                        {outsideOwnerApprovalRequired
+                                            ? "Tahap ini aktif setelah seluruh owner aset menyetujui."
+                                            : "Permohonan langsung masuk ke tahap ini setelah diajukan."}
                                     </p>
                                     {!logisticsApprovers.length && (
                                         <p className="mt-3 rounded border border-red/25 bg-red/10 p-2 text-xs font-semibold text-red">
@@ -515,10 +700,11 @@ export default function Create({
                                 (!due ||
                                     !letter ||
                                     !logisticsApprovers.length ||
-                                    chosen.some(
-                                        (tool) =>
-                                            !tool.approval_owner_sso_user_id,
-                                    )))
+                                    (outsideOwnerApprovalRequired &&
+                                        chosenLines.some(
+                                            (line) =>
+                                                !line.unit.owner_sso_user_id,
+                                        ))))
                         }
                     />
                 </Panel>
@@ -531,32 +717,41 @@ export default function Create({
                             Token dan Barang
                         </h2>
                         <div className="mt-5 space-y-3">
-                            {chosen.map((t) => (
+                            {chosenLines.map((line, index) => (
                                 <div
-                                    key={t.id}
+                                    key={line.key}
                                     className="grid gap-3 rounded border bg-canvas/50 p-3 sm:grid-cols-[1fr_220px] sm:items-center"
                                 >
                                     <div>
                                         <p className="font-display text-lg font-bold">
-                                            {t.name}
+                                            {line.tool.name}
+                                            {(quantities[line.tool.id] ?? 1) >
+                                                1 && (
+                                                <span className="ml-2 font-num text-xs text-muted">
+                                                    #{line.ordinal}
+                                                </span>
+                                            )}
                                         </p>
                                         <p className="font-num text-xs text-muted">
-                                            {t.code}
+                                            {line.tool.code} ·{" "}
+                                            {line.unit.asset_code}
                                         </p>
                                     </div>
                                     <Field
                                         label="Kode token fisik"
-                                        error={errors[`token_codes.${t.id}`]}
+                                        error={errors[`token_codes.${index}`]}
                                     >
                                         {canChooseBorrower && newBorrower ? (
                                             <input
                                                 className="control font-num uppercase"
                                                 placeholder="Contoh: 08-01"
-                                                value={tokenCodes[t.id] || ""}
+                                                value={
+                                                    tokenCodes[line.key] || ""
+                                                }
                                                 onChange={(e) =>
                                                     setTokenCodes({
                                                         ...tokenCodes,
-                                                        [t.id]:
+                                                        [line.key]:
                                                             e.target.value.toUpperCase(),
                                                     })
                                                 }
@@ -564,11 +759,14 @@ export default function Create({
                                         ) : (
                                             <SearchableSelect
                                                 className="control font-num"
-                                                value={tokenCodes[t.id] || ""}
+                                                value={
+                                                    tokenCodes[line.key] || ""
+                                                }
                                                 onChange={(e) =>
                                                     setTokenCodes({
                                                         ...tokenCodes,
-                                                        [t.id]: e.target.value,
+                                                        [line.key]:
+                                                            e.target.value,
                                                     })
                                                 }
                                             >
@@ -586,10 +784,8 @@ export default function Create({
                                                                 tokenCodes,
                                                             ).some(
                                                                 ([key, code]) =>
-                                                                    Number(
-                                                                        key,
-                                                                    ) !==
-                                                                        t.id &&
+                                                                    key !==
+                                                                        line.key &&
                                                                     code ===
                                                                         x.code,
                                                             ),
@@ -647,7 +843,7 @@ export default function Create({
                                     Object.values(tokenCodes).filter(Boolean)
                                         .length
                                 }
-                                /{selected.length}
+                                /{chosenLines.length}
                             </p>
                             <p className="mt-4 text-xs leading-relaxed text-muted">
                                 Kode disimpan pada item dan tidak dapat dipakai
@@ -658,7 +854,7 @@ export default function Create({
                             disabled={
                                 processing ||
                                 Object.values(tokenCodes).filter(Boolean)
-                                    .length !== selected.length ||
+                                    .length !== chosenLines.length ||
                                 (canChooseBorrower &&
                                     newBorrower &&
                                     !guest.name)
