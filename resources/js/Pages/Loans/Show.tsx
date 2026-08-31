@@ -168,6 +168,21 @@ export default function Show({
                                             Token {item.physical_token.code}
                                         </p>
                                     )}
+                                    {loan.cases
+                                        ?.filter(
+                                            (assetCase) =>
+                                                assetCase.unit_id ===
+                                                item.unit?.id,
+                                        )
+                                        .map((assetCase) => (
+                                            <Link
+                                                key={assetCase.id}
+                                                href={`/kasus/${assetCase.id}`}
+                                                className="ml-2 mt-1 inline-flex rounded border border-amber/50 bg-amber/10 px-2 py-1 font-num text-xs font-bold text-amber-ink hover:bg-amber/20"
+                                            >
+                                                Kasus {assetCase.case_no}
+                                            </Link>
+                                        ))}
                                 </div>
                                 <StatusBadge
                                     status={

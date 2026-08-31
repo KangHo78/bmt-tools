@@ -44,9 +44,20 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
     const update = (patch: Partial<Inspection>) =>
         setValues({ ...values, [item.id]: { ...values[item.id], ...patch } });
     const readyEntries = Object.entries(values).filter(
-        ([, value]) => value.status && value.photo,
+        ([, value]) =>
+            value.status &&
+            value.photo &&
+            (value.status === "sesuai" || value.note.trim().length >= 5),
     );
     const complete = readyEntries.length;
+    const readyCases = readyEntries.filter(
+        ([, value]) => value.status !== "sesuai",
+    ).length;
+    const readyAccepted = complete - readyCases;
+    const actionLabel =
+        readyCases > 0
+            ? `Simpan ${readyCases} Kasus${readyAccepted > 0 ? ` & Terima ${readyAccepted}` : ""}`
+            : `Kembalikan ${complete} Unit`;
     const submit = () => {
         const fd = new FormData();
         readyEntries.forEach(([id, v]) => {
@@ -144,9 +155,7 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                 className="btn-primary w-full !px-3"
                             >
                                 <ClipboardCheck size={16} />
-                                {processing
-                                    ? "Menyimpan..."
-                                    : `Kembalikan ${complete} Unit`}
+                                {processing ? "Menyimpan..." : actionLabel}
                             </button>
                         </div>
                     </Panel>
@@ -241,7 +250,8 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                 k.includes(String(item.id)),
                             ) && (
                                 <p className="mt-3 text-sm text-red">
-                                    Lengkapi status dan foto unit ini.
+                                    {errors[`inspections.${item.id}.note`] ??
+                                        "Lengkapi status, bukti, dan kronologi unit ini."}
                                 </p>
                             )}
                             <div className="mt-6 flex justify-between border-t pt-5">
@@ -257,7 +267,11 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                     <button
                                         disabled={
                                             !values[item.id].status ||
-                                            !values[item.id].photo
+                                            !values[item.id].photo ||
+                                            (values[item.id].status !==
+                                                "sesuai" &&
+                                                values[item.id].note.trim()
+                                                    .length < 5)
                                         }
                                         onClick={() => setCurrent(current + 1)}
                                         className="btn-primary"
@@ -274,8 +288,10 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                         {processing
                                             ? "Menyimpan..."
                                             : complete === loan.items.length
-                                              ? "Selesaikan Semua"
-                                              : `Kembalikan ${complete} Unit`}
+                                              ? readyCases > 0
+                                                  ? actionLabel
+                                                  : "Selesaikan Semua"
+                                              : actionLabel}
                                     </button>
                                 )}
                             </div>
@@ -283,14 +299,15 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                     </Panel>
                 </div>
                 {Object.values(values).some((v) =>
-                    ["rusak", "hilang"].includes(v.status),
+                    ["rusak", "tidak_lengkap", "hilang"].includes(v.status),
                 ) && (
                     <div className="mt-5 flex gap-3 rounded-lg border border-red/30 bg-red/10 p-4 text-sm text-red">
                         <AlertTriangle className="shrink-0" />
                         <p>
-                            Temuan rusak atau hilang akan otomatis membuka kasus
-                            pertanggungjawaban. Berita Acara wajib dilengkapi
-                            setelah inspeksi.
+                            Item rusak, tidak lengkap, atau hilang akan disimpan
+                            sebagai kasus dan belum diterima sebagai
+                            pengembalian. Token baru dilepas setelah Berita
+                            Acara dan keputusan kasus selesai.
                         </p>
                     </div>
                 )}

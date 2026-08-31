@@ -130,7 +130,7 @@ class LoanController extends Controller
             $isBorrower = ($loan->borrower?->user_id ?? $loan->user_id) === $request->user()->id;
             abort_unless($isBorrower || $this->service->canReviewApproval($loan, $request->user()), 403);
         }
-        $loan->load(['borrower.user:id,email', 'approver:id,name', 'approvals.approver:id,name', 'approvals.requiredApprover:id,name', 'items.toolType', 'items.physicalToken', 'items.unit.location', 'extensions']);
+        $loan->load(['borrower.user:id,email', 'approver:id,name', 'approvals.approver:id,name', 'approvals.requiredApprover:id,name', 'items.toolType', 'items.physicalToken', 'items.unit.location', 'extensions', 'cases:id,case_no,loan_id,unit_id,type,stage']);
 
         return Inertia::render('Loans/Show', [
             'loan' => $loan,
@@ -189,7 +189,7 @@ class LoanController extends Controller
         ]);
 
         if ($loan->items->isEmpty()) {
-            return to_route('loans.show', $loan)->with('error', 'Seluruh item pada peminjaman ini sudah dikembalikan.');
+            return to_route('loans.show', $loan)->with('error', 'Tidak ada item yang dapat diinspeksi. Item bermasalah harus diselesaikan melalui menu Kasus.');
         }
 
         return Inertia::render('Loans/Return', ['loan' => $loan]);
@@ -201,11 +201,18 @@ class LoanController extends Controller
         foreach ($data['inspections'] as $id => &$inspection) {
             $inspection['photos'] = [$request->file("inspections.{$id}.photo")->store('return-inspections', 'public')];
         }
-        $completed = $this->service->completeReturn($loan, $request->user(), $data['inspections']);
+        $result = $this->service->completeReturn($loan, $request->user(), $data['inspections']);
 
-        return to_route('loans.show', $loan)->with('success', $completed
+        $message = $result['completed']
             ? 'Seluruh pengembalian selesai dan token telah dilepas.'
-            : count($data['inspections']).' item berhasil dikembalikan. Item lainnya tetap aktif dan dapat dikembalikan kemudian.');
+            : $result['accepted'].' item diterima';
+        if ($result['cases'] > 0) {
+            $message .= ($result['accepted'] > 0 ? '; ' : '').$result['cases'].' item ditahan dan dibuatkan kasus. Token item tersebut belum dilepas.';
+        } elseif (! $result['completed']) {
+            $message .= '. Item lainnya tetap aktif dan dapat dikembalikan kemudian.';
+        }
+
+        return to_route('loans.show', $loan)->with('success', $message);
     }
 
     public function extend(Request $request, Loan $loan)

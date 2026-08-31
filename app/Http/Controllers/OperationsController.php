@@ -26,7 +26,9 @@ class OperationsController extends Controller
             'borrower:id,name,institution',
             'items' => fn ($query) => $query->where('return_status', 'belum_dicek'),
             'items.toolType:id,name,code',
-        ])->whereIn('status', ['berjalan', 'terlambat', 'menunggu_inspeksi'])->orderBy('due_date')->get()]);
+        ])->whereIn('status', ['berjalan', 'terlambat', 'menunggu_inspeksi'])
+            ->whereHas('items', fn ($query) => $query->where('return_status', 'belum_dicek'))
+            ->orderBy('due_date')->get()]);
     }
 
     public function inventory()

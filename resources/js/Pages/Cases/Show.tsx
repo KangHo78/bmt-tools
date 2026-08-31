@@ -49,6 +49,27 @@ export default function Show({
             />
             <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
                 <div className="space-y-5">
+                    {c.loan && c.stage !== "selesai" && (
+                        <Panel className="border-l-4 !border-l-amber p-5">
+                            <p className="font-num text-[10px] font-bold uppercase tracking-[.16em] text-amber-ink">
+                                Pengembalian tertahan
+                            </p>
+                            <h2 className="mt-1 font-display text-2xl font-bold">
+                                Token belum dilepas
+                            </h2>
+                            <p className="mt-2 text-sm leading-relaxed text-muted">
+                                Item dari transaksi {c.loan.trx_no} baru
+                                dianggap selesai dikembalikan setelah kasus ini
+                                ditutup dengan Berita Acara dan keputusan final.
+                            </p>
+                            <Link
+                                href={`/peminjaman/${c.loan.id}`}
+                                className="btn-secondary mt-4 w-full"
+                            >
+                                Buka Transaksi
+                            </Link>
+                        </Panel>
+                    )}
                     <Panel className="p-5">
                         <p className="label">Kronologi</p>
                         <p className="text-sm leading-relaxed">
@@ -128,20 +149,32 @@ export default function Show({
                                 }
                             >
                                 {[
-                                    "belum_diproses",
-                                    "dalam_proses",
-                                    "diperbaiki",
-                                    "sudah_diganti",
-                                    "tidak_mengganti",
-                                    "dibebaskan",
-                                ].map((x) => (
-                                    <option key={x}>
-                                        {x.replaceAll("_", " ")}
+                                    ["belum_diproses", "Belum diproses"],
+                                    ["dalam_proses", "Dalam proses"],
+                                    ["diperbaiki", "Diperbaiki"],
+                                    ["sudah_diganti", "Diganti unit lain"],
+                                    ["dibeli_baru", "Dibelikan unit baru"],
+                                    [
+                                        "tidak_mengganti",
+                                        "Tidak perlu penggantian",
+                                    ],
+                                    ["dibebaskan", "Tanggung jawab dibebaskan"],
+                                ].map(([value, label]) => (
+                                    <option key={value} value={value}>
+                                        {label}
                                     </option>
                                 ))}
                             </SearchableSelect>
+                            {errors.resolution_status && (
+                                <span className="text-xs text-red">
+                                    {errors.resolution_status}
+                                </span>
+                            )}
                         </Field>
-                        <Field label="Unit pengganti (opsional)" wide>
+                        <Field
+                            label="Unit pengganti / unit hasil pembelian"
+                            wide
+                        >
                             <SearchableSelect
                                 className="control"
                                 value={d.replacement_unit_id}
@@ -153,12 +186,29 @@ export default function Show({
                                 }
                             >
                                 <option value="">Belum ada</option>
-                                {replacementUnits.map((u) => (
-                                    <option key={u.id} value={u.id}>
-                                        {u.asset_code} · {u.tool_type.name}
-                                    </option>
-                                ))}
+                                {replacementUnits
+                                    .filter(
+                                        (unit) =>
+                                            !c.unit?.tool_type?.id ||
+                                            unit.tool_type.id ===
+                                                c.unit.tool_type.id,
+                                    )
+                                    .map((u) => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.asset_code} · {u.tool_type.name}
+                                        </option>
+                                    ))}
                             </SearchableSelect>
+                            <span className="mt-1 block text-[10px] leading-relaxed text-muted">
+                                Wajib untuk keputusan “diganti” atau “dibelikan
+                                baru”. Unit hasil pembelian harus dicatat di
+                                penerimaan aset terlebih dahulu.
+                            </span>
+                            {errors.replacement_unit_id && (
+                                <span className="text-xs text-red">
+                                    {errors.replacement_unit_id}
+                                </span>
+                            )}
                         </Field>
                         <Field label="Keputusan lembaga" wide>
                             <textarea
@@ -195,15 +245,18 @@ export default function Show({
                         </Field>
                     </div>
                     <div className="mt-5 rounded border border-amber/40 bg-amber/10 p-3 text-xs text-amber-ink">
-                        Kasus hanya dapat ditutup jika Berita Acara dan
-                        keputusan lembaga sudah lengkap.
+                        Menutup kasus akan menyelesaikan pengembalian item dan
+                        melepas token peminjam. Berita Acara, keputusan, dan
+                        hasil penyelesaian wajib lengkap.
                     </div>
                     <button
                         onClick={submit}
                         className="btn-primary mt-5 w-full"
                     >
                         <ShieldCheck size={17} />
-                        Simpan Tindak Lanjut
+                        {d.stage === "selesai"
+                            ? "Tutup Kasus & Selesaikan Pengembalian"
+                            : "Simpan Tindak Lanjut"}
                     </button>
                 </Panel>
             </div>

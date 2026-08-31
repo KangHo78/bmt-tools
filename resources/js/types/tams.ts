@@ -92,4 +92,11 @@ export interface Loan {
     }>;
     items: LoanItem[];
     extensions?: any[];
+    cases?: Array<{
+        id: number;
+        case_no: string;
+        unit_id: number;
+        type: string;
+        stage: string;
+    }>;
 }

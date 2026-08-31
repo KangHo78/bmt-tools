@@ -43,6 +43,11 @@ class Loan extends Model
         return $this->hasMany(LoanExtension::class);
     }
 
+    public function cases()
+    {
+        return $this->hasMany(AssetCase::class);
+    }
+
     public function approvals()
     {
         return $this->hasMany(LoanApproval::class);

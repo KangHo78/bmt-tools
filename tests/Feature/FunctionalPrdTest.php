@@ -163,8 +163,8 @@ class FunctionalPrdTest extends TestCase
     {
         $head = User::where('email', 'kepala@tams.id')->firstOrFail();
         $case = AssetCase::firstOrFail();
-        $this->actingAs($head)->post(route('cases.update', $case), ['stage' => 'selesai', 'resolution_status' => 'sudah_diganti', 'decision' => ''])->assertSessionHasErrors('stage');
-        $this->actingAs($head)->post(route('cases.update', $case), ['stage' => 'selesai', 'resolution_status' => 'sudah_diganti', 'decision' => 'User mengganti unit dengan spesifikasi setara.', 'report' => UploadedFile::fake()->create('berita-acara.pdf', 100, 'application/pdf')])->assertRedirect();
+        $this->actingAs($head)->post(route('cases.update', $case), ['stage' => 'selesai', 'resolution_status' => 'tidak_mengganti', 'decision' => ''])->assertSessionHasErrors('stage');
+        $this->actingAs($head)->post(route('cases.update', $case), ['stage' => 'selesai', 'resolution_status' => 'tidak_mengganti', 'decision' => 'Tidak diperlukan pembelian unit baru berdasarkan hasil evaluasi.', 'report' => UploadedFile::fake()->create('berita-acara.pdf', 100, 'application/pdf')])->assertRedirect();
         $this->assertSame('selesai', $case->fresh()->stage);
         $this->assertTrue($case->fresh()->has_berita_acara);
         $this->assertNotNull($case->fresh()->closed_at);

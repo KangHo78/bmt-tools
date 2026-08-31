@@ -249,7 +249,7 @@ class LoanService
         });
     }
 
-    public function completeReturn(Loan $loan, User $staff, array $inspections): bool
+    public function completeReturn(Loan $loan, User $staff, array $inspections): array
     {
         return DB::transaction(function () use ($loan, $staff, $inspections) {
             abort_unless(in_array($loan->status, ['berjalan', 'terlambat', 'menunggu_inspeksi'], true), 422, 'Peminjaman tidak dapat dikembalikan pada status ini.');
@@ -263,43 +263,84 @@ class LoanService
             if ($items->count() !== count($itemIds)) {
                 throw ValidationException::withMessages(['inspections' => 'Salah satu unit bukan bagian aktif dari peminjaman ini atau sudah dikembalikan.']);
             }
+            $acceptedCount = 0;
+            $caseCount = 0;
             foreach ($items as $item) {
                 $inspection = $inspections[$item->id];
                 $status = $inspection['status'];
                 if ($status === 'sesuai' && collect($inspection['checklist'])->contains(fn ($checked) => ! (bool) $checked)) {
                     throw ValidationException::withMessages(['inspections' => 'Status Sesuai tidak dapat dipilih ketika ada kelengkapan yang tidak tersedia.']);
                 }
-                $item->update(['return_status' => $status, 'condition_in' => $status === 'sesuai' ? 'baik' : ($status === 'hilang' ? 'hilang' : 'rusak'), 'return_note' => $inspection['note'] ?? null, 'return_checklist' => $inspection['checklist'], 'photos_in' => $inspection['photos'] ?? []]);
-                if ($item->unit) {
-                    $item->unit->update(['status' => $status === 'sesuai' ? 'tersedia' : $status, 'condition' => $status === 'sesuai' ? 'baik' : ($status === 'tidak_lengkap' ? 'perlu_perhatian' : $status)]);
+                if ($status !== 'sesuai' && mb_strlen(trim((string) ($inspection['note'] ?? ''))) < 5) {
+                    throw ValidationException::withMessages(["inspections.{$item->id}.note" => 'Kronologi minimal 5 karakter wajib diisi untuk item bermasalah.']);
                 }
+
+                $isIssue = $status !== 'sesuai';
+                $item->update([
+                    'return_status' => $isIssue ? 'menunggu_kasus' : 'sesuai',
+                    'condition_in' => $status === 'sesuai' ? 'baik' : ($status === 'hilang' ? 'hilang' : 'rusak'),
+                    'return_note' => $inspection['note'] ?? null,
+                    'return_checklist' => $inspection['checklist'],
+                    'photos_in' => $inspection['photos'] ?? [],
+                ]);
+
+                if ($isIssue) {
+                    $case = AssetCase::create([
+                        'case_no' => 'KSS-'.now()->format('Y').'-'.str_pad((string) (AssetCase::count() + 1), 3, '0', STR_PAD_LEFT),
+                        'type' => $status,
+                        'stage' => 'dilaporkan',
+                        'unit_id' => $item->unit_id,
+                        'loan_id' => $loan->id,
+                        'responsible_user_id' => $loan->user_id,
+                        'chronology' => $inspection['note'],
+                        'evidence_urls' => $inspection['photos'] ?? [],
+                        'has_evidence' => ! empty($inspection['photos']),
+                    ]);
+                    $item->unit?->update([
+                        'status' => $status,
+                        'condition' => $status === 'tidak_lengkap' ? 'perlu_perhatian' : $status,
+                    ]);
+                    $this->log($staff, 'case.created_from_return', $loan, ['case_id' => $case->id, 'loan_item_id' => $item->id]);
+                    $caseCount++;
+
+                    continue;
+                }
+
+                $item->unit?->update(['status' => 'tersedia', 'condition' => 'baik']);
                 $item->physicalToken?->update(['status' => 'dipegang_peminjam']);
-                if (in_array($status, ['rusak', 'hilang'], true)) {
-                    AssetCase::create(['case_no' => 'KSS-'.now()->format('Y').'-'.str_pad((string) (AssetCase::count() + 1), 3, '0', STR_PAD_LEFT), 'type' => $status, 'stage' => 'dilaporkan', 'unit_id' => $item->unit_id, 'loan_id' => $loan->id, 'responsible_user_id' => $loan->user_id, 'chronology' => $inspection['note'] ?: 'Temuan pada inspeksi pengembalian.', 'evidence_urls' => $inspection['photos'] ?? [], 'has_evidence' => ! empty($inspection['photos'])]);
-                }
+                $acceptedCount++;
             }
-            if ($loan->user_id && ($user = User::query()->lockForUpdate()->find($loan->user_id))) {
-                $user->update(['token_used' => max(0, $user->token_used - $items->count())]);
+            if ($acceptedCount > 0 && $loan->user_id && ($user = User::query()->lockForUpdate()->find($loan->user_id))) {
+                $user->update(['token_used' => max(0, $user->token_used - $acceptedCount)]);
             }
 
-            $hasRemainingItems = $loan->items()->where('return_status', 'belum_dicek')->exists();
+            $outstandingQuery = $loan->items()->whereIn('return_status', ['belum_dicek', 'menunggu_kasus']);
+            $hasRemainingItems = (clone $outstandingQuery)->exists();
             $loan->update($hasRemainingItems
                 ? ['status' => 'menunggu_inspeksi']
                 : ['status' => 'selesai', 'returned_at' => now()]);
 
             $this->notify(
                 $loan,
-                $hasRemainingItems ? 'Pengembalian sebagian selesai' : 'Pengembalian selesai',
-                $hasRemainingItems
-                    ? $items->count()." item pada {$loan->trx_no} telah dikembalikan; item lainnya masih aktif."
-                    : "Pengembalian {$loan->trx_no} telah diverifikasi dan seluruh token dilepas.",
+                $caseCount > 0 ? 'Pengembalian memiliki kasus' : ($hasRemainingItems ? 'Pengembalian sebagian selesai' : 'Pengembalian selesai'),
+                $caseCount > 0
+                    ? "{$caseCount} item pada {$loan->trx_no} ditahan sampai kasus diselesaikan."
+                    : ($hasRemainingItems
+                        ? "{$acceptedCount} item pada {$loan->trx_no} telah dikembalikan; item lainnya masih aktif."
+                        : "Pengembalian {$loan->trx_no} telah diverifikasi dan seluruh token dilepas."),
             );
-            $this->log($staff, $hasRemainingItems ? 'loan.partially_returned' : 'loan.returned', $loan, [
-                'returned_item_ids' => $items->pluck('id')->all(),
-                'remaining_items' => $loan->items()->where('return_status', 'belum_dicek')->count(),
+            $this->log($staff, $hasRemainingItems ? 'loan.return_inspected' : 'loan.returned', $loan, [
+                'inspected_item_ids' => $items->pluck('id')->all(),
+                'accepted_items' => $acceptedCount,
+                'case_items' => $caseCount,
+                'remaining_items' => (clone $outstandingQuery)->count(),
             ]);
 
-            return ! $hasRemainingItems;
+            return [
+                'completed' => ! $hasRemainingItems,
+                'accepted' => $acceptedCount,
+                'cases' => $caseCount,
+            ];
         });
     }
 

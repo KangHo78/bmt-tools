@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AssetCase;
 use App\Models\Loan;
 use App\Models\PhysicalToken;
 use App\Models\ToolType;
@@ -428,6 +429,48 @@ class ToolsAssetWorkflowTest extends TestCase
         foreach ($loan->fresh()->items as $item) {
             $this->assertSame('tersedia', $item->unit->status);
         }
+    }
+
+    public function test_problematic_return_waits_for_case_resolution_before_releasing_token(): void
+    {
+        $loan = Loan::where('trx_no', 'TRX-1042')->firstOrFail();
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $head = User::where('email', 'kepala@tams.id')->firstOrFail();
+        $borrower = $loan->user;
+        $item = $loan->items()->with(['toolType', 'unit', 'physicalToken'])->firstOrFail();
+        $before = $borrower->token_used;
+
+        $this->actingAs($staff)->post(route('loans.return', $loan), [
+            'inspections' => [
+                $item->id => [
+                    'status' => 'rusak',
+                    'note' => 'Motor alat tidak dapat berputar saat diperiksa.',
+                    'checklist' => array_fill_keys($item->toolType->checklist ?? [], true),
+                    'photo' => UploadedFile::fake()->image('return-damaged.jpg'),
+                ],
+            ],
+        ])->assertRedirect(route('loans.show', $loan));
+
+        $case = AssetCase::query()->where('loan_id', $loan->id)->where('unit_id', $item->unit_id)->firstOrFail();
+        $this->assertSame('menunggu_kasus', $item->fresh()->return_status);
+        $this->assertSame('ditahan_tool_room', $item->physicalToken->fresh()->status);
+        $this->assertSame('menunggu_inspeksi', $loan->fresh()->status);
+        $this->assertSame($before, $borrower->fresh()->token_used);
+        $this->assertSame('dilaporkan', $case->stage);
+
+        $this->actingAs($head)->post(route('cases.update', $case), [
+            'stage' => 'selesai',
+            'resolution_status' => 'diperbaiki',
+            'decision' => 'Unit diperbaiki dan telah lulus pemeriksaan fungsi.',
+            'report' => UploadedFile::fake()->create('berita-acara.pdf', 100, 'application/pdf'),
+        ])->assertRedirect();
+
+        $this->assertSame('selesai', $case->fresh()->stage);
+        $this->assertSame('rusak', $item->fresh()->return_status);
+        $this->assertSame('dipegang_peminjam', $item->physicalToken->fresh()->status);
+        $this->assertSame('tersedia', $item->unit->fresh()->status);
+        $this->assertSame($before - 1, $borrower->fresh()->token_used);
+        $this->assertSame('menunggu_inspeksi', $loan->fresh()->status);
     }
 
     public function test_borrower_cannot_open_staff_registry(): void
