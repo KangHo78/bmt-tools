@@ -165,8 +165,15 @@ class LoanController extends Controller
 
     public function handover(Request $request, Loan $loan)
     {
-        $data = $request->validate(['unit_codes' => ['required', 'array'], 'unit_codes.*' => ['required', 'string'], 'confirm_staff' => ['accepted'], 'confirm_borrower' => ['accepted'], 'photo' => ['nullable', 'image', 'max:5120']]);
-        $this->service->handover($loan, $request->user(), $data['unit_codes'], $request->file('photo'));
+        $data = $request->validate([
+            'unit_codes' => ['required', 'array'],
+            'unit_codes.*' => ['required', 'string'],
+            'handover_evidence' => ['required', 'array'],
+            'handover_evidence.*' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
+            'confirm_staff' => ['accepted'],
+            'confirm_borrower' => ['accepted'],
+        ]);
+        $this->service->handover($loan, $request->user(), $data['unit_codes'], $request->file('handover_evidence', []));
 
         return to_route('loans.show', $loan)->with('success', 'Serah terima berhasil diselesaikan.');
     }

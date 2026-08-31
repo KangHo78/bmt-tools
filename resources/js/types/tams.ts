@@ -53,6 +53,8 @@ export interface LoanItem {
     condition_out?: string;
     condition_in?: string;
     return_note?: string;
+    handover_evidence_urls?: string[];
+    return_evidence_urls?: string[];
     physical_token?: { id: number; code: string; status: string };
 }
 export interface Borrower {

@@ -371,20 +371,33 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->actingAs($head)->post(route('loans.approve', $loan));
         $loan->load('items');
         $codes = [];
+        $handoverEvidence = [];
         foreach ($loan->items as $item) {
             $codes[$item->id] = $item->unit->asset_code;
+            $handoverEvidence[$item->id] = $item->is($loan->items->first())
+                ? UploadedFile::fake()->create("handover-{$item->id}.pdf", 100, 'application/pdf')
+                : UploadedFile::fake()->image("handover-{$item->id}.jpg");
         }
 
         $this->actingAs($staff)->post(route('loans.handover', $loan), [
             'unit_codes' => $codes, 'confirm_staff' => '1', 'confirm_borrower' => '1',
-            'photo' => UploadedFile::fake()->image('handover.jpg'),
+            'handover_evidence' => $handoverEvidence,
         ])->assertRedirect(route('loans.show', $loan));
 
         $this->assertSame('berjalan', $loan->fresh()->status);
         $loan->load('items.unit');
         foreach ($loan->items as $item) {
             $this->assertSame('dipinjam', $item->unit->status);
+            $this->assertCount(1, $item->photos_out);
+            Storage::disk('public')->assertExists($item->photos_out[0]);
         }
+        $this->actingAs($staff)->get(route('loans.return.form', $loan))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Loans/Return')
+                ->where('loan.items', fn ($items) => collect($items)->every(
+                    fn ($item) => count($item['handover_evidence_urls']) === 1
+                )));
         $before = $borrower->fresh()->token_used;
         $inspections = [];
         foreach ($loan->items as $item) {

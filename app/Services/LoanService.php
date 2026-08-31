@@ -213,9 +213,9 @@ class LoanService
         return null;
     }
 
-    public function handover(Loan $loan, User $staff, array $unitCodes, ?UploadedFile $photo): void
+    public function handover(Loan $loan, User $staff, array $unitCodes, array $evidenceFiles): void
     {
-        DB::transaction(function () use ($loan, $staff, $unitCodes, $photo) {
+        DB::transaction(function () use ($loan, $staff, $unitCodes, $evidenceFiles) {
             abort_unless(in_array($loan->status, ['disetujui', 'menunggu_serah_terima'], true), 422, 'Peminjaman belum dapat diserahkan.');
             $loan->load(['items.toolType', 'items.physicalToken', 'items.unit']);
             if (count($unitCodes) !== $loan->items->count()) {
@@ -226,15 +226,24 @@ class LoanService
             }
             foreach ($loan->items as $item) {
                 $code = $unitCodes[$item->id] ?? null;
+                $evidence = $evidenceFiles[$item->id] ?? null;
+                if (! $evidence instanceof UploadedFile) {
+                    throw ValidationException::withMessages(["handover_evidence.{$item->id}" => 'Bukti serah terima wajib diunggah untuk setiap item.']);
+                }
                 $unit = ToolUnit::query()->lockForUpdate()->find($item->unit_id);
                 if (! $unit || $unit->asset_code !== $code || $unit->tool_type_id !== $item->tool_type_id || $unit->status !== 'direservasi') {
                     throw ValidationException::withMessages(["unit_codes.{$item->id}" => "Unit {$code} bukan unit yang direservasi untuk permohonan ini."]);
                 }
-                $item->update(['unit_id' => $unit->id, 'condition_out' => $unit->condition, 'checklist' => array_fill_keys($item->toolType->checklist ?? [], true)]);
+                $item->update([
+                    'unit_id' => $unit->id,
+                    'condition_out' => $unit->condition,
+                    'checklist' => array_fill_keys($item->toolType->checklist ?? [], true),
+                    'photos_out' => [$evidence->store('handover-evidence', 'public')],
+                ]);
                 $unit->update(['status' => 'dipinjam']);
                 $item->physicalToken?->update(['status' => 'ditahan_tool_room']);
             }
-            $loan->update(['status' => 'berjalan', 'handover_at' => now(), 'handover_photo_url' => $photo?->store('handover', 'public')]);
+            $loan->update(['status' => 'berjalan', 'handover_at' => now(), 'handover_photo_url' => null]);
             $this->notify($loan, 'Serah terima selesai', "Alat {$loan->trx_no} telah diserahkan. Tenggat {$loan->due_date->translatedFormat('d F Y')}.");
             $this->log($staff, 'loan.handed_over', $loan);
         });

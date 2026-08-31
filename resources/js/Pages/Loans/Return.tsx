@@ -5,8 +5,10 @@ import {
     Camera,
     Check,
     ClipboardCheck,
+    ExternalLink,
+    FileText,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Panel } from "@/Components/TamsUI";
 import type { Loan } from "@/types/tams";
 
@@ -141,6 +143,11 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                             <p className="font-num text-xs text-muted">
                                 {item.unit?.asset_code}
                             </p>
+                            <EvidenceComparison
+                                beforeUrls={item.handover_evidence_urls ?? []}
+                                afterFile={values[item.id].photo}
+                                setAfterFile={(photo) => update({ photo })}
+                            />
                             <div className="mt-6">
                                 <p className="label">Kondisi hasil inspeksi</p>
                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -211,29 +218,6 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                     placeholder="Wajib dijelaskan jika rusak, tidak lengkap, atau hilang..."
                                 />
                             </label>
-                            <label
-                                className={`mt-5 block cursor-pointer rounded-lg border-2 border-dashed p-5 text-center ${values[item.id].photo ? "border-green bg-green/5" : "border-line hover:border-ink"}`}
-                            >
-                                <Camera className="mx-auto text-muted" />
-                                <p className="mt-2 text-sm font-semibold">
-                                    Foto fisik wajib
-                                </p>
-                                <p className="mt-1 font-num text-xs text-muted">
-                                    {values[item.id].photo?.name ??
-                                        "Ambil foto atau pilih dari galeri"}
-                                </p>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    capture="environment"
-                                    className="sr-only"
-                                    onChange={(e) =>
-                                        update({
-                                            photo: e.target.files?.[0] ?? null,
-                                        })
-                                    }
-                                />
-                            </label>
                             {Object.keys(errors).some((k) =>
                                 k.includes(String(item.id)),
                             ) && (
@@ -295,4 +279,155 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
             </main>
         </div>
     );
+}
+
+function EvidenceComparison({
+    beforeUrls,
+    afterFile,
+    setAfterFile,
+}: {
+    beforeUrls: string[];
+    afterFile: File | null;
+    setAfterFile: (file: File | null) => void;
+}) {
+    return (
+        <section className="mt-5 overflow-hidden rounded-lg border border-line bg-canvas/50">
+            <div className="flex items-center justify-between border-b border-line bg-ink px-4 py-3 text-white">
+                <div>
+                    <p className="font-num text-[10px] font-bold uppercase tracking-[.16em] text-amber">
+                        Condition evidence
+                    </p>
+                    <h2 className="font-display text-lg font-bold">
+                        Perbandingan Sebelum & Sesudah
+                    </h2>
+                </div>
+                <span className="rounded border border-white/20 px-2 py-1 font-num text-[10px] text-white/65">
+                    PER ITEM
+                </span>
+            </div>
+            <div className="grid md:grid-cols-2">
+                <div className="border-b border-line p-4 md:border-b-0 md:border-r">
+                    <p className="label mb-2">Sebelum · Serah Terima</p>
+                    <StoredEvidence urls={beforeUrls} />
+                </div>
+                <div className="p-4">
+                    <p className="label mb-2">Sesudah · Pengembalian</p>
+                    <ReturnEvidencePicker
+                        file={afterFile}
+                        setFile={setAfterFile}
+                    />
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function StoredEvidence({ urls }: { urls: string[] }) {
+    if (!urls.length) {
+        return (
+            <div className="grid min-h-40 place-items-center rounded-md border border-dashed border-line bg-surface p-4 text-center text-xs text-muted">
+                Bukti serah terima belum tersedia untuk item ini.
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            {urls.map((url) =>
+                isPdf(url) ? (
+                    <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex min-h-40 items-center justify-center gap-3 rounded-md border border-red/20 bg-surface p-4 text-red hover:border-red"
+                    >
+                        <FileText size={30} />
+                        <span>
+                            <strong className="block text-sm">
+                                Dokumen PDF
+                            </strong>
+                            <small className="mt-1 flex items-center gap-1 text-muted">
+                                Buka bukti <ExternalLink size={12} />
+                            </small>
+                        </span>
+                    </a>
+                ) : (
+                    <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block overflow-hidden rounded-md border border-line bg-surface"
+                    >
+                        <img
+                            src={url}
+                            alt="Bukti kondisi saat serah terima"
+                            className="h-40 w-full object-contain"
+                        />
+                    </a>
+                ),
+            )}
+        </div>
+    );
+}
+
+function ReturnEvidencePicker({
+    file,
+    setFile,
+}: {
+    file: File | null;
+    setFile: (file: File | null) => void;
+}) {
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!file) {
+            setPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [file]);
+
+    return (
+        <label
+            className={`relative grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-md border-2 border-dashed text-center ${file ? "border-green bg-green/5" : "border-line bg-surface hover:border-ink"}`}
+        >
+            {previewUrl && file?.type.startsWith("image/") ? (
+                <img
+                    src={previewUrl}
+                    alt="Pratinjau kondisi saat pengembalian"
+                    className="absolute inset-0 size-full object-contain"
+                />
+            ) : (
+                <span className="relative p-4">
+                    <Camera className="mx-auto text-muted" />
+                    <span className="mt-2 block text-sm font-semibold">
+                        Foto kondisi pengembalian
+                    </span>
+                    <span className="mt-1 block font-num text-xs text-muted">
+                        {file?.name ?? "Ambil foto atau pilih dari galeri"}
+                    </span>
+                </span>
+            )}
+            {file && (
+                <span className="absolute bottom-2 right-2 rounded bg-ink px-2 py-1 font-num text-[10px] text-white shadow">
+                    Ganti foto
+                </span>
+            )}
+            <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+        </label>
+    );
+}
+
+function isPdf(url: string) {
+    return /\.pdf(?:$|[?#])/i.test(url);
 }

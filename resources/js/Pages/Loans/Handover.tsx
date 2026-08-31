@@ -1,24 +1,25 @@
 import { Head, Link, router } from "@inertiajs/react";
 import {
     ArrowLeft,
-    Camera,
     CheckCircle2,
+    FileText,
     PackageCheck,
     ScanLine,
+    Upload,
 } from "lucide-react";
 import { useState } from "react";
 import { Panel, StatusBadge } from "@/Components/TamsUI";
 import type { Loan } from "@/types/tams";
 
 export default function Handover({ loan }: { loan: Loan }) {
-    const [codes, setCodes] = useState<Record<number, string>>(
-        Object.fromEntries(
-            loan.items.map((i) => [i.id, i.unit?.asset_code ?? ""]),
-        ),
+    const codes: Record<number, string> = Object.fromEntries(
+        loan.items.map((item) => [item.id, item.unit?.asset_code ?? ""]),
     );
     const [staff, setStaff] = useState(false);
     const [borrower, setBorrower] = useState(false);
-    const [photo, setPhoto] = useState<File | null>(null);
+    const [evidence, setEvidence] = useState<Record<number, File | null>>(
+        Object.fromEntries(loan.items.map((item) => [item.id, null])),
+    );
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
     const submit = () => {
@@ -28,7 +29,9 @@ export default function Handover({ loan }: { loan: Loan }) {
         );
         if (staff) data.append("confirm_staff", "1");
         if (borrower) data.append("confirm_borrower", "1");
-        if (photo) data.append("photo", photo);
+        Object.entries(evidence).forEach(([id, file]) => {
+            if (file) data.append(`handover_evidence[${id}]`, file);
+        });
         setProcessing(true);
         router.post(`/serah-terima/${loan.id}`, data, {
             forceFormData: true,
@@ -82,7 +85,11 @@ export default function Handover({ loan }: { loan: Loan }) {
                                     <p className="font-num text-xs text-muted">
                                         {item.tool_type.code}
                                     </p>
-                                    {item.physical_token && <p className="mt-2 inline-flex rounded bg-amber/15 px-2 py-1 font-num text-xs font-bold">Kepingan {item.physical_token.code}</p>}
+                                    {item.physical_token && (
+                                        <p className="mt-2 inline-flex rounded bg-amber/15 px-2 py-1 font-num text-xs font-bold">
+                                            Kepingan {item.physical_token.code}
+                                        </p>
+                                    )}
                                     <div className="mt-3 flex flex-wrap gap-1">
                                         {item.tool_type.checklist?.map((x) => (
                                             <span
@@ -102,16 +109,11 @@ export default function Handover({ loan }: { loan: Loan }) {
                                             size={17}
                                         />
                                         <input
-                                            className="control pl-10 font-num"
+                                            className="control cursor-not-allowed bg-canvas pl-10 font-num text-ink/75"
                                             value={codes[item.id]}
-                                            onChange={(e) =>
-                                                setCodes({
-                                                    ...codes,
-                                                    [item.id]:
-                                                        e.target.value.toUpperCase(),
-                                                })
-                                            }
-                                            placeholder={`${item.tool_type.code}-2026-0001`}
+                                            readOnly
+                                            aria-readonly="true"
+                                            title="Kode unit ditentukan dari unit yang telah direservasi"
                                         />
                                     </div>
                                     {errors[`unit_codes.${item.id}`] && (
@@ -121,33 +123,58 @@ export default function Handover({ loan }: { loan: Loan }) {
                                     )}
                                 </label>
                             </div>
+                            <div className="border-t border-line bg-canvas/45 p-5">
+                                <label
+                                    className={`grid cursor-pointer gap-3 rounded-lg border-2 border-dashed p-4 transition sm:grid-cols-[auto_1fr_auto] sm:items-center ${evidence[item.id] ? "border-green bg-green/5" : "border-line bg-surface hover:border-ink"}`}
+                                >
+                                    <span
+                                        className={`grid size-10 place-items-center rounded-md ${evidence[item.id] ? "bg-green text-white" : "bg-ink text-white"}`}
+                                    >
+                                        {evidence[item.id]?.type ===
+                                        "application/pdf" ? (
+                                            <FileText size={19} />
+                                        ) : (
+                                            <Upload size={19} />
+                                        )}
+                                    </span>
+                                    <span>
+                                        <span className="block text-sm font-semibold">
+                                            Bukti kondisi unit saat serah terima
+                                        </span>
+                                        <span className="mt-1 block font-num text-xs text-muted">
+                                            {evidence[item.id]?.name ??
+                                                "Pilih JPG, PNG, atau PDF · maksimal 5 MB"}
+                                        </span>
+                                    </span>
+                                    <span className="btn-secondary pointer-events-none !min-h-9 !px-3 text-xs">
+                                        {evidence[item.id]
+                                            ? "Ganti file"
+                                            : "Pilih file"}
+                                    </span>
+                                    <input
+                                        type="file"
+                                        accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                                        className="sr-only"
+                                        onChange={(event) =>
+                                            setEvidence({
+                                                ...evidence,
+                                                [item.id]:
+                                                    event.target.files?.[0] ??
+                                                    null,
+                                            })
+                                        }
+                                    />
+                                </label>
+                                {errors[`handover_evidence.${item.id}`] && (
+                                    <p className="mt-2 text-xs font-semibold text-red">
+                                        {errors[`handover_evidence.${item.id}`]}
+                                    </p>
+                                )}
+                            </div>
                         </Panel>
                     ))}
                 </div>
                 <Panel className="mt-5 p-5">
-                    <label className="block cursor-pointer rounded-lg border-2 border-dashed border-line p-6 text-center hover:border-ink">
-                        <Camera className="mx-auto text-muted" />
-                        <p className="mt-2 text-sm font-semibold">
-                            Foto kondisi saat serah terima
-                        </p>
-                        <p className="mt-1 text-xs text-muted">
-                            JPG/PNG maksimal 5 MB
-                        </p>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            className="sr-only"
-                            onChange={(e) =>
-                                setPhoto(e.target.files?.[0] ?? null)
-                            }
-                        />
-                        {photo && (
-                            <p className="mt-3 font-num text-xs text-green">
-                                {photo.name}
-                            </p>
-                        )}
-                    </label>
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
                         <Confirm
                             checked={staff}
@@ -172,7 +199,8 @@ export default function Handover({ loan }: { loan: Loan }) {
                             processing ||
                             !staff ||
                             !borrower ||
-                            Object.values(codes).some((x) => !x)
+                            Object.values(codes).some((x) => !x) ||
+                            Object.values(evidence).some((file) => !file)
                         }
                         onClick={submit}
                         className="btn-primary mt-5 w-full"

@@ -3,10 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class LoanItem extends Model
 {
     protected $guarded = [];
+
+    protected $appends = ['handover_evidence_urls', 'return_evidence_urls'];
 
     protected function casts(): array
     {
@@ -31,5 +34,26 @@ class LoanItem extends Model
     public function physicalToken()
     {
         return $this->belongsTo(PhysicalToken::class);
+    }
+
+    public function getHandoverEvidenceUrlsAttribute(): array
+    {
+        return $this->evidenceUrls($this->photos_out);
+    }
+
+    public function getReturnEvidenceUrlsAttribute(): array
+    {
+        return $this->evidenceUrls($this->photos_in);
+    }
+
+    private function evidenceUrls(?array $paths): array
+    {
+        return collect($paths ?? [])->filter()->map(function (string $path) {
+            if (filter_var($path, FILTER_VALIDATE_URL)) {
+                return $path;
+            }
+
+            return Storage::disk('public')->url($path);
+        })->values()->all();
     }
 }
