@@ -131,9 +131,10 @@ export default function Show({
                             <button
                                 onClick={() => setExtend(true)}
                                 className="btn-secondary"
+                                title="Ajukan perubahan tanggal pengembalian"
                             >
                                 <CalendarPlus size={17} />
-                                Perpanjang
+                                Perpanjang Tenggat
                             </button>
                         )}
                     </div>

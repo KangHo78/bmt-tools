@@ -22,7 +22,11 @@ class OperationsController extends Controller
 
     public function returns()
     {
-        return Inertia::render('Operations/Returns', ['loans' => Loan::with(['borrower:id,name,institution', 'items.toolType:id,name,code'])->whereIn('status', ['berjalan', 'terlambat', 'menunggu_inspeksi'])->orderBy('due_date')->get()]);
+        return Inertia::render('Operations/Returns', ['loans' => Loan::with([
+            'borrower:id,name,institution',
+            'items' => fn ($query) => $query->where('return_status', 'belum_dicek'),
+            'items.toolType:id,name,code',
+        ])->whereIn('status', ['berjalan', 'terlambat', 'menunggu_inspeksi'])->orderBy('due_date')->get()]);
     }
 
     public function inventory()

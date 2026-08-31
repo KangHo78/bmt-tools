@@ -17,7 +17,7 @@ export default function Returns({ loans }: { loans: Loan[] }) {
             <PageHeader
                 eyebrow="Inspection queue"
                 title="Pengembalian"
-                description="Pilih transaksi, cocokkan unit, dan dokumentasikan kondisi fisik bersama peminjam."
+                description="Pilih satu atau beberapa unit yang kembali, lalu dokumentasikan kondisi fisiknya bersama peminjam."
             />
             <Panel className="overflow-hidden">
                 {loans.length ? (
@@ -51,9 +51,16 @@ export default function Returns({ loans }: { loans: Loan[] }) {
                                             </p>
                                         </td>
                                         <td className="p-4 text-xs">
-                                            {l.items
-                                                .map((i) => i.tool_type.name)
-                                                .join(", ")}
+                                            <p>
+                                                {l.items
+                                                    .map(
+                                                        (i) => i.tool_type.name,
+                                                    )
+                                                    .join(", ")}
+                                            </p>
+                                            <p className="mt-1 font-num text-[10px] font-bold text-green">
+                                                {l.items.length} UNIT TERSISA
+                                            </p>
                                         </td>
                                         <td className="p-4 font-semibold">
                                             {formatDate(l.due_date)}

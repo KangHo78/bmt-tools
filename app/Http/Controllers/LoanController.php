@@ -180,7 +180,17 @@ class LoanController extends Controller
 
     public function returnForm(Loan $loan)
     {
-        $loan->load(['borrower:id,name,institution', 'items.toolType', 'items.physicalToken', 'items.unit']);
+        $loan->load([
+            'borrower:id,name,institution',
+            'items' => fn ($query) => $query->where('return_status', 'belum_dicek'),
+            'items.toolType',
+            'items.physicalToken',
+            'items.unit',
+        ]);
+
+        if ($loan->items->isEmpty()) {
+            return to_route('loans.show', $loan)->with('error', 'Seluruh item pada peminjaman ini sudah dikembalikan.');
+        }
 
         return Inertia::render('Loans/Return', ['loan' => $loan]);
     }
@@ -191,9 +201,11 @@ class LoanController extends Controller
         foreach ($data['inspections'] as $id => &$inspection) {
             $inspection['photos'] = [$request->file("inspections.{$id}.photo")->store('return-inspections', 'public')];
         }
-        $this->service->completeReturn($loan, $request->user(), $data['inspections']);
+        $completed = $this->service->completeReturn($loan, $request->user(), $data['inspections']);
 
-        return to_route('loans.show', $loan)->with('success', 'Pengembalian selesai dan token telah dilepas.');
+        return to_route('loans.show', $loan)->with('success', $completed
+            ? 'Seluruh pengembalian selesai dan token telah dilepas.'
+            : count($data['inspections']).' item berhasil dikembalikan. Item lainnya tetap aktif dan dapat dikembalikan kemudian.');
     }
 
     public function extend(Request $request, Loan $loan)

@@ -249,16 +249,22 @@ class LoanService
         });
     }
 
-    public function completeReturn(Loan $loan, User $staff, array $inspections): void
+    public function completeReturn(Loan $loan, User $staff, array $inspections): bool
     {
-        DB::transaction(function () use ($loan, $staff, $inspections) {
+        return DB::transaction(function () use ($loan, $staff, $inspections) {
             abort_unless(in_array($loan->status, ['berjalan', 'terlambat', 'menunggu_inspeksi'], true), 422, 'Peminjaman tidak dapat dikembalikan pada status ini.');
-            $loan->load('items.unit');
-            foreach ($loan->items as $item) {
-                $inspection = $inspections[$item->id] ?? null;
-                if (! $inspection) {
-                    throw ValidationException::withMessages(['inspections' => 'Seluruh unit wajib diperiksa.']);
-                }
+            $itemIds = array_map('intval', array_keys($inspections));
+            $items = $loan->items()
+                ->whereIn('id', $itemIds)
+                ->where('return_status', 'belum_dicek')
+                ->with(['unit', 'physicalToken'])
+                ->lockForUpdate()
+                ->get();
+            if ($items->count() !== count($itemIds)) {
+                throw ValidationException::withMessages(['inspections' => 'Salah satu unit bukan bagian aktif dari peminjaman ini atau sudah dikembalikan.']);
+            }
+            foreach ($items as $item) {
+                $inspection = $inspections[$item->id];
                 $status = $inspection['status'];
                 if ($status === 'sesuai' && collect($inspection['checklist'])->contains(fn ($checked) => ! (bool) $checked)) {
                     throw ValidationException::withMessages(['inspections' => 'Status Sesuai tidak dapat dipilih ketika ada kelengkapan yang tidak tersedia.']);
@@ -267,14 +273,33 @@ class LoanService
                 if ($item->unit) {
                     $item->unit->update(['status' => $status === 'sesuai' ? 'tersedia' : $status, 'condition' => $status === 'sesuai' ? 'baik' : ($status === 'tidak_lengkap' ? 'perlu_perhatian' : $status)]);
                 }
+                $item->physicalToken?->update(['status' => 'dipegang_peminjam']);
                 if (in_array($status, ['rusak', 'hilang'], true)) {
                     AssetCase::create(['case_no' => 'KSS-'.now()->format('Y').'-'.str_pad((string) (AssetCase::count() + 1), 3, '0', STR_PAD_LEFT), 'type' => $status, 'stage' => 'dilaporkan', 'unit_id' => $item->unit_id, 'loan_id' => $loan->id, 'responsible_user_id' => $loan->user_id, 'chronology' => $inspection['note'] ?: 'Temuan pada inspeksi pengembalian.', 'evidence_urls' => $inspection['photos'] ?? [], 'has_evidence' => ! empty($inspection['photos'])]);
                 }
             }
-            $loan->update(['status' => 'selesai', 'returned_at' => now()]);
-            $this->releaseTokens($loan);
-            $this->notify($loan, 'Pengembalian selesai', "Pengembalian {$loan->trx_no} telah diverifikasi dan token dilepas.");
-            $this->log($staff, 'loan.returned', $loan);
+            if ($loan->user_id && ($user = User::query()->lockForUpdate()->find($loan->user_id))) {
+                $user->update(['token_used' => max(0, $user->token_used - $items->count())]);
+            }
+
+            $hasRemainingItems = $loan->items()->where('return_status', 'belum_dicek')->exists();
+            $loan->update($hasRemainingItems
+                ? ['status' => 'menunggu_inspeksi']
+                : ['status' => 'selesai', 'returned_at' => now()]);
+
+            $this->notify(
+                $loan,
+                $hasRemainingItems ? 'Pengembalian sebagian selesai' : 'Pengembalian selesai',
+                $hasRemainingItems
+                    ? $items->count()." item pada {$loan->trx_no} telah dikembalikan; item lainnya masih aktif."
+                    : "Pengembalian {$loan->trx_no} telah diverifikasi dan seluruh token dilepas.",
+            );
+            $this->log($staff, $hasRemainingItems ? 'loan.partially_returned' : 'loan.returned', $loan, [
+                'returned_item_ids' => $items->pluck('id')->all(),
+                'remaining_items' => $loan->items()->where('return_status', 'belum_dicek')->count(),
+            ]);
+
+            return ! $hasRemainingItems;
         });
     }
 

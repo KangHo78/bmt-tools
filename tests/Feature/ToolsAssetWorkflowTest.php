@@ -399,12 +399,30 @@ class ToolsAssetWorkflowTest extends TestCase
                     fn ($item) => count($item['handover_evidence_urls']) === 1
                 )));
         $before = $borrower->fresh()->token_used;
-        $inspections = [];
+        $inspections = collect();
         foreach ($loan->items as $item) {
-            $inspections[$item->id] = ['status' => 'sesuai', 'note' => 'Lengkap dan normal', 'checklist' => array_fill_keys($item->toolType->checklist ?? [], true), 'photo' => UploadedFile::fake()->image("return-{$item->id}.jpg")];
+            $inspections->put($item->id, ['status' => 'sesuai', 'note' => 'Lengkap dan normal', 'checklist' => array_fill_keys($item->toolType->checklist ?? [], true), 'photo' => UploadedFile::fake()->image("return-{$item->id}.jpg")]);
         }
+        $this->assertGreaterThan(1, $inspections->count());
 
-        $this->actingAs($staff)->post(route('loans.return', $loan), ['inspections' => $inspections])->assertRedirect(route('loans.show', $loan));
+        $firstItem = $loan->items->first();
+        $this->actingAs($staff)->post(route('loans.return', $loan), [
+            'inspections' => [$firstItem->id => $inspections->get($firstItem->id)],
+        ])->assertRedirect(route('loans.show', $loan));
+
+        $this->assertSame('menunggu_inspeksi', $loan->fresh()->status);
+        $this->assertSame('tersedia', $firstItem->unit->fresh()->status);
+        $this->assertSame($before - 1, $borrower->fresh()->token_used);
+        $this->actingAs($staff)->get(route('loans.return.form', $loan))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Loans/Return')
+                ->has('loan.items', $loan->items->count() - 1)
+                ->where('loan.items', fn ($items) => collect($items)->doesntContain('id', $firstItem->id)));
+
+        $this->actingAs($staff)->post(route('loans.return', $loan), [
+            'inspections' => $inspections->except($firstItem->id)->all(),
+        ])->assertRedirect(route('loans.show', $loan));
         $this->assertSame('selesai', $loan->fresh()->status);
         $this->assertSame($before - $loan->tokens_used, $borrower->fresh()->token_used);
         foreach ($loan->fresh()->items as $item) {

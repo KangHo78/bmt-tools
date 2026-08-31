@@ -43,12 +43,13 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
     const item = loan.items[current];
     const update = (patch: Partial<Inspection>) =>
         setValues({ ...values, [item.id]: { ...values[item.id], ...patch } });
-    const complete = Object.values(values).filter(
-        (v) => v.status && v.photo,
-    ).length;
+    const readyEntries = Object.entries(values).filter(
+        ([, value]) => value.status && value.photo,
+    );
+    const complete = readyEntries.length;
     const submit = () => {
         const fd = new FormData();
-        Object.entries(values).forEach(([id, v]) => {
+        readyEntries.forEach(([id, v]) => {
             fd.append(`inspections[${id}][status]`, v.status);
             fd.append(`inspections[${id}][note]`, v.note);
             Object.entries(v.checklist).forEach(([label, checked]) =>
@@ -84,7 +85,7 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                     </p>
                 </div>
                 <span className="font-num text-xs">
-                    {complete}/{loan.items.length}
+                    {complete} SIAP / {loan.items.length} TERSISA
                 </span>
             </header>
             <main className="mx-auto max-w-4xl p-4 py-8 sm:p-8">
@@ -130,6 +131,24 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                 </div>
                             </button>
                         ))}
+                        <div className="border-t border-line bg-canvas p-3">
+                            <p className="mb-3 text-xs leading-relaxed text-muted">
+                                Anda dapat memproses unit yang sudah lengkap
+                                sekarang. Unit lain tetap aktif untuk
+                                pengembalian berikutnya.
+                            </p>
+                            <button
+                                type="button"
+                                disabled={processing || complete === 0}
+                                onClick={submit}
+                                className="btn-primary w-full !px-3"
+                            >
+                                <ClipboardCheck size={16} />
+                                {processing
+                                    ? "Menyimpan..."
+                                    : `Kembalikan ${complete} Unit`}
+                            </button>
+                        </div>
                     </Panel>
                     <Panel className="overflow-hidden">
                         <div className="hazard-stripe h-2" />
@@ -247,17 +266,16 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                     </button>
                                 ) : (
                                     <button
-                                        disabled={
-                                            processing ||
-                                            complete !== loan.items.length
-                                        }
+                                        disabled={processing || complete === 0}
                                         onClick={submit}
                                         className="btn-primary"
                                     >
                                         <ClipboardCheck size={17} />
                                         {processing
                                             ? "Menyimpan..."
-                                            : "Selesaikan Pengembalian"}
+                                            : complete === loan.items.length
+                                              ? "Selesaikan Semua"
+                                              : `Kembalikan ${complete} Unit`}
                                     </button>
                                 )}
                             </div>
