@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Panel } from "@/Components/TamsUI";
+import { useLocale } from "@/lib/i18n";
 import type { Loan } from "@/types/tams";
 
 type Inspection = {
@@ -19,6 +20,7 @@ type Inspection = {
     checklist: Record<string, boolean>;
 };
 export default function ReturnFlow({ loan }: { loan: Loan }) {
+    const { locale, t } = useLocale();
     const [current, setCurrent] = useState(0);
     const [values, setValues] = useState<Record<number, Inspection>>(
         Object.fromEntries(
@@ -64,8 +66,12 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
     const readyAccepted = complete - readyCases;
     const actionLabel =
         readyCases > 0
-            ? `Simpan ${readyCases} Kasus${readyAccepted > 0 ? ` & Terima ${readyAccepted}` : ""}`
-            : `Kembalikan ${complete} Unit`;
+            ? locale === "id"
+                ? `Simpan ${readyCases} Kasus${readyAccepted > 0 ? ` & Terima ${readyAccepted}` : ""}`
+                : `Save ${readyCases} ${readyCases === 1 ? "Case" : "Cases"}${readyAccepted > 0 ? ` & Accept ${readyAccepted}` : ""}`
+            : locale === "id"
+              ? `Kembalikan ${complete} Unit`
+              : `Return ${complete} ${complete === 1 ? "Unit" : "Units"}`;
     const submit = () => {
         const fd = new FormData();
         readyEntries.forEach(([id, v]) => {
@@ -95,16 +101,18 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                     className="flex items-center gap-2 text-sm font-semibold"
                 >
                     <ArrowLeft size={17} />
-                    Batal
+                    {t("Batal")}
                 </Link>
                 <div className="text-center">
                     <p className="font-num text-xs text-amber">{loan.trx_no}</p>
                     <p className="font-display text-lg font-bold">
-                        INSPEKSI KEMBALI
+                        {t("INSPEKSI KEMBALI")}
                     </p>
                 </div>
                 <span className="font-num text-xs">
-                    {complete} SIAP / {loan.items.length} TERSISA
+                    {locale === "id"
+                        ? `${complete} SIAP / ${loan.items.length} TERSISA`
+                        : `${complete} READY / ${loan.items.length} REMAINING`}
                 </span>
             </header>
             <main className="mx-auto max-w-4xl p-4 py-8 sm:p-8">
@@ -119,9 +127,9 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                 <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
                     <Panel className="h-fit overflow-hidden">
                         <div className="border-b p-4">
-                            <p className="label">Daftar Unit</p>
+                            <p className="label">{t("Daftar Unit")}</p>
                             <h2 className="font-display text-xl font-bold">
-                                Pemeriksaan
+                                {t("Pemeriksaan")}
                             </h2>
                         </div>
                         {loan.items.map((row, i) => (
@@ -152,9 +160,9 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                         ))}
                         <div className="border-t border-line bg-canvas p-3">
                             <p className="mb-3 text-xs leading-relaxed text-muted">
-                                Anda dapat memproses unit yang sudah lengkap
-                                sekarang. Unit lain tetap aktif untuk
-                                pengembalian berikutnya.
+                                {t(
+                                    "Anda dapat memproses unit yang sudah lengkap sekarang. Unit lain tetap aktif untuk pengembalian berikutnya.",
+                                )}
                             </p>
                             <button
                                 type="button"
@@ -163,7 +171,7 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                 className="btn-primary w-full !px-3"
                             >
                                 <ClipboardCheck size={16} />
-                                {processing ? "Menyimpan..." : actionLabel}
+                                {processing ? t("Menyimpan...") : actionLabel}
                             </button>
                         </div>
                     </Panel>
@@ -185,7 +193,9 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                 setAfterFile={(photo) => update({ photo })}
                             />
                             <div className="mt-6">
-                                <p className="label">Kondisi hasil inspeksi</p>
+                                <p className="label">
+                                    {t("Kondisi hasil inspeksi")}
+                                </p>
                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                     {[
                                         ["sesuai", "Sesuai"],
@@ -198,13 +208,15 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                             onClick={() => update({ status })}
                                             className={`min-h-14 rounded-md border px-2 text-xs font-bold ${values[item.id].status === status ? (status === "sesuai" ? "border-green bg-green text-white" : "border-red bg-red text-white") : "bg-white hover:border-ink"}`}
                                         >
-                                            {label}
+                                            {t(label)}
                                         </button>
                                     ))}
                                 </div>
                             </div>
                             <div className="mt-5">
-                                <p className="label">Checklist kelengkapan</p>
+                                <p className="label">
+                                    {t("Checklist kelengkapan")}
+                                </p>
                                 <div className="grid gap-2 sm:grid-cols-2">
                                     {item.tool_type.checklist?.map((x) => (
                                         <label
@@ -244,14 +256,18 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                 </div>
                             </div>
                             <label className="mt-5 block">
-                                <span className="label">Catatan inspeksi</span>
+                                <span className="label">
+                                    {t("Catatan inspeksi")}
+                                </span>
                                 <textarea
                                     value={values[item.id].note}
                                     onChange={(e) =>
                                         update({ note: e.target.value })
                                     }
                                     className="control min-h-24"
-                                    placeholder="Wajib dijelaskan jika rusak, tidak lengkap, atau hilang..."
+                                    placeholder={t(
+                                        "Wajib dijelaskan jika rusak, tidak lengkap, atau hilang...",
+                                    )}
                                 />
                             </label>
                             {Object.entries(errors)
@@ -263,7 +279,7 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                         key={key}
                                         className="mt-3 text-sm text-red"
                                     >
-                                        {message}
+                                        {t(message)}
                                     </p>
                                 ))}
                             <div className="mt-6 flex justify-between border-t pt-5">
@@ -273,7 +289,7 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                     className="btn-secondary"
                                 >
                                     <ArrowLeft size={17} />
-                                    Sebelumnya
+                                    {t("Sebelumnya")}
                                 </button>
                                 {current < loan.items.length - 1 ? (
                                     <button
@@ -288,7 +304,7 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                         onClick={() => setCurrent(current + 1)}
                                         className="btn-primary"
                                     >
-                                        Unit Berikutnya
+                                        {t("Unit Berikutnya")}
                                     </button>
                                 ) : (
                                     <button
@@ -298,11 +314,11 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                     >
                                         <ClipboardCheck size={17} />
                                         {processing
-                                            ? "Menyimpan..."
+                                            ? t("Menyimpan...")
                                             : complete === loan.items.length
                                               ? readyCases > 0
                                                   ? actionLabel
-                                                  : "Selesaikan Semua"
+                                                  : t("Selesaikan Semua")
                                               : actionLabel}
                                     </button>
                                 )}
@@ -316,10 +332,9 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                     <div className="mt-5 flex gap-3 rounded-lg border border-red/30 bg-red/10 p-4 text-sm text-red">
                         <AlertTriangle className="shrink-0" />
                         <p>
-                            Item rusak, tidak lengkap, atau hilang akan disimpan
-                            sebagai kasus dan belum diterima sebagai
-                            pengembalian. Token baru dilepas setelah Berita
-                            Acara dan keputusan kasus selesai.
+                            {t(
+                                "Item rusak, tidak lengkap, atau hilang akan disimpan sebagai kasus dan belum diterima sebagai pengembalian. Token baru dilepas setelah Berita Acara dan keputusan kasus selesai.",
+                            )}
                         </p>
                     </div>
                 )}
@@ -337,15 +352,17 @@ function EvidenceComparison({
     afterFile: File | null;
     setAfterFile: (file: File | null) => void;
 }) {
+    const { t } = useLocale();
+
     return (
         <section className="mt-5 overflow-hidden rounded-lg border border-line bg-canvas/50">
             <div className="flex items-center justify-between border-b border-line bg-ink px-4 py-3 text-white">
                 <div>
                     <p className="font-num text-[10px] font-bold uppercase tracking-[.16em] text-amber">
-                        Condition evidence
+                        {t("Condition evidence")}
                     </p>
                     <h2 className="font-display text-lg font-bold">
-                        Perbandingan Sebelum & Sesudah
+                        {t("Perbandingan Sebelum & Sesudah")}
                     </h2>
                 </div>
                 <span className="rounded border border-white/20 px-2 py-1 font-num text-[10px] text-white/65">
@@ -354,11 +371,11 @@ function EvidenceComparison({
             </div>
             <div className="grid md:grid-cols-2">
                 <div className="border-b border-line p-4 md:border-b-0 md:border-r">
-                    <p className="label mb-2">Sebelum · Serah Terima</p>
+                    <p className="label mb-2">{t("Sebelum · Serah Terima")}</p>
                     <StoredEvidence urls={beforeUrls} />
                 </div>
                 <div className="p-4">
-                    <p className="label mb-2">Sesudah · Pengembalian</p>
+                    <p className="label mb-2">{t("Sesudah · Pengembalian")}</p>
                     <ReturnEvidencePicker
                         file={afterFile}
                         setFile={setAfterFile}
@@ -370,10 +387,12 @@ function EvidenceComparison({
 }
 
 function StoredEvidence({ urls }: { urls: string[] }) {
+    const { t } = useLocale();
+
     if (!urls.length) {
         return (
             <div className="grid min-h-40 place-items-center rounded-md border border-dashed border-line bg-surface p-4 text-center text-xs text-muted">
-                Bukti serah terima belum tersedia untuk item ini.
+                {t("Bukti serah terima belum tersedia untuk item ini.")}
             </div>
         );
     }
@@ -392,10 +411,10 @@ function StoredEvidence({ urls }: { urls: string[] }) {
                         <FileText size={30} />
                         <span>
                             <strong className="block text-sm">
-                                Dokumen PDF
+                                {t("Dokumen PDF")}
                             </strong>
                             <small className="mt-1 flex items-center gap-1 text-muted">
-                                Buka bukti <ExternalLink size={12} />
+                                {t("Buka bukti")} <ExternalLink size={12} />
                             </small>
                         </span>
                     </a>
@@ -409,7 +428,7 @@ function StoredEvidence({ urls }: { urls: string[] }) {
                     >
                         <img
                             src={url}
-                            alt="Bukti kondisi saat serah terima"
+                            alt={t("Bukti kondisi saat serah terima")}
                             className="h-40 w-full object-contain"
                         />
                     </a>
@@ -426,6 +445,7 @@ function ReturnEvidencePicker({
     file: File | null;
     setFile: (file: File | null) => void;
 }) {
+    const { t } = useLocale();
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
     useEffect(() => {
@@ -445,23 +465,23 @@ function ReturnEvidencePicker({
             {previewUrl && file?.type.startsWith("image/") ? (
                 <img
                     src={previewUrl}
-                    alt="Pratinjau kondisi saat pengembalian"
+                    alt={t("Pratinjau kondisi saat pengembalian")}
                     className="absolute inset-0 size-full object-contain"
                 />
             ) : (
                 <span className="relative p-4">
                     <Camera className="mx-auto text-muted" />
                     <span className="mt-2 block text-sm font-semibold">
-                        Foto kondisi pengembalian
+                        {t("Foto kondisi pengembalian")}
                     </span>
                     <span className="mt-1 block font-num text-xs text-muted">
-                        {file?.name ?? "Ambil foto atau pilih dari galeri"}
+                        {file?.name ?? t("Ambil foto atau pilih dari galeri")}
                     </span>
                 </span>
             )}
             {file && (
                 <span className="absolute bottom-2 right-2 rounded bg-ink px-2 py-1 font-num text-[10px] text-white shadow">
-                    Ganti foto
+                    {t("Ganti foto")}
                 </span>
             )}
             <input
