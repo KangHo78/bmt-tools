@@ -56,6 +56,54 @@ class FunctionalPrdTest extends TestCase
         $this->assertDatabaseHas('activity_logs', ['action' => 'asset.received', 'subject_id' => $receipt->id]);
     }
 
+    public function test_inventory_groups_units_by_receipt_and_supporting_document_can_be_updated(): void
+    {
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $types = ToolType::query()->take(2)->get();
+        $location = Location::where('type', 'slot')->firstOrFail();
+
+        $this->actingAs($staff)->post(route('inventory.receipts.store'), [
+            'request_reference' => 'REQ-BATCH-001',
+            'owner_institution' => 'Workshop Sipil',
+            'received_date' => today()->toDateString(),
+            'items' => [
+                ['tool_type_id' => $types[0]->id, 'location_id' => $location->id, 'received_quantity' => 2, 'initial_condition' => 'baik'],
+                ['tool_type_id' => $types[1]->id, 'location_id' => $location->id, 'received_quantity' => 1, 'initial_condition' => 'baik'],
+            ],
+        ])->assertRedirect();
+
+        $receipt = AssetReceipt::latest('id')->firstOrFail();
+        $this->assertMatchesRegularExpression('/^RCV-\d{6}-\d{4}$/', $receipt->reference_no);
+
+        $this->actingAs($staff)->get(route('inventory.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inventory/Index')
+                ->where('filters.view', 'receipts')
+                ->where('units', null)
+                ->has('receipts.data', 1)
+                ->where('receipts.data.0.id', $receipt->id)
+                ->where('receipts.data.0.items_count', 2)
+                ->where('receipts.data.0.total_units', fn ($total) => (int) $total === 3));
+
+        $document = UploadedFile::fake()->create('delivery-note.pdf', 120, 'application/pdf');
+        $this->actingAs($staff)->post(route('inventory.receipts.update', $receipt), [
+            '_method' => 'patch',
+            'request_reference' => 'REQ-BATCH-REV-001',
+            'notes' => 'Dokumen pengiriman telah diperbarui.',
+            'document' => $document,
+        ])->assertRedirect();
+
+        $receipt->refresh();
+        $this->assertSame('REQ-BATCH-REV-001', $receipt->request_reference);
+        $this->assertNotNull($receipt->document_url);
+        Storage::disk('public')->assertExists($receipt->document_url);
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'asset.receipt_updated',
+            'subject_id' => $receipt->id,
+        ]);
+    }
+
     public function test_catalog_labels_can_be_printed_by_tools_admin_but_not_borrower(): void
     {
         $staff = User::where('email', 'petugas@tams.id')->firstOrFail();

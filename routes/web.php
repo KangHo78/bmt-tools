@@ -67,6 +67,7 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::get('/inventaris/penerimaan/baru', [InventoryController::class, 'create'])->name('inventory.receipts.create');
         Route::post('/inventaris/penerimaan', [InventoryController::class, 'store'])->name('inventory.receipts.store');
         Route::get('/inventaris/penerimaan/{receipt}', [InventoryController::class, 'showReceipt'])->name('inventory.receipts.show');
+        Route::patch('/inventaris/penerimaan/{receipt}', [InventoryController::class, 'updateReceipt'])->name('inventory.receipts.update');
         Route::get('/inventaris/penerimaan/{receipt}/label', [InventoryController::class, 'labels'])->name('inventory.labels');
         Route::get('/katalog/{toolType}/label', [CatalogController::class, 'labels'])->name('catalog.labels');
         Route::post('/inventaris/unit/{unit}/pindah', [InventoryController::class, 'move'])->name('inventory.move');

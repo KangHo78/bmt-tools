@@ -13,6 +13,7 @@ use App\Models\ToolUnit;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -21,19 +22,38 @@ class InventoryController extends Controller
 {
     public function index(Request $request)
     {
+        $view = $request->string('view')->toString() === 'units' ? 'units' : 'receipts';
+        $search = trim((string) $request->q);
+
         return Inertia::render('Inventory/Index', [
-            'units' => ToolUnit::with(['toolType:id,name,code', 'location:id,name'])
-                ->when($request->q, fn ($query, $q) => $query->where(function ($query) use ($q) {
+            'units' => $view === 'units' ? ToolUnit::with(['toolType:id,name,code', 'location:id,name'])
+                ->when($search, fn ($query, $q) => $query->where(function ($query) use ($q) {
                     $query->where('asset_code', 'like', "%{$q}%")
                         ->orWhere('owner', 'like', "%{$q}%")
                         ->orWhereHas('toolType', fn ($query) => $query->where('name', 'like', "%{$q}%"));
                 }))
                 ->orderBy('asset_code')
                 ->paginate(20)
-                ->withQueryString(),
-            'receipts' => AssetReceipt::with('receiver:id,name')->withCount('items')->latest()->limit(8)->get(),
-            'locations' => Location::orderBy('name')->get(['id', 'name']),
-            'filters' => $request->only('q'),
+                ->withQueryString() : null,
+            'receipts' => $view === 'receipts' ? AssetReceipt::query()
+                ->with(['receiver:id,name', 'items.toolType:id,name,code'])
+                ->withCount('items')
+                ->withSum('items as total_units', 'received_quantity')
+                ->when($search, fn ($query, $q) => $query->where(function ($query) use ($q) {
+                    $query->where('reference_no', 'like', "%{$q}%")
+                        ->orWhere('request_reference', 'like', "%{$q}%")
+                        ->orWhere('owner_institution', 'like', "%{$q}%")
+                        ->orWhereHas('items.toolType', fn ($itemQuery) => $itemQuery
+                            ->where('name', 'like', "%{$q}%")
+                            ->orWhere('code', 'like', "%{$q}%"))
+                        ->orWhereHas('items.units', fn ($unitQuery) => $unitQuery->where('asset_code', 'like', "%{$q}%"));
+                }))
+                ->latest('received_date')
+                ->latest('id')
+                ->paginate(15)
+                ->withQueryString() : null,
+            'locations' => $view === 'units' ? Location::orderBy('name')->get(['id', 'name']) : [],
+            'filters' => ['q' => $search, 'view' => $view],
         ]);
     }
 
@@ -203,6 +223,37 @@ class InventoryController extends Controller
         $receipt->load(['receiver:id,name', 'items.toolType', 'items.location', 'items.units']);
 
         return Inertia::render('Inventory/ReceiptShow', ['receipt' => $receipt]);
+    }
+
+    public function updateReceipt(Request $request, AssetReceipt $receipt)
+    {
+        $data = $request->validate([
+            'request_reference' => ['nullable', 'string', 'max:100'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'document' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'remove_document' => ['nullable', 'boolean'],
+        ]);
+
+        $oldDocument = $receipt->document_url;
+        $newDocument = $request->file('document')?->store('asset-receipts', 'public');
+        $documentUrl = $newDocument
+            ?? (($data['remove_document'] ?? false) ? null : $oldDocument);
+
+        $receipt->update([
+            'request_reference' => $data['request_reference'] ?? null,
+            'notes' => $data['notes'] ?? null,
+            'document_url' => $documentUrl,
+        ]);
+
+        if ($oldDocument && $oldDocument !== $documentUrl) {
+            Storage::disk('public')->delete($oldDocument);
+        }
+        AuditLogger::record('asset.receipt_updated', $receipt, [
+            'document_replaced' => filled($newDocument),
+            'document_removed' => ! $documentUrl && filled($oldDocument),
+        ]);
+
+        return back()->with('success', 'Data dan dokumen penerimaan berhasil diperbarui.');
     }
 
     public function labels(AssetReceipt $receipt)
