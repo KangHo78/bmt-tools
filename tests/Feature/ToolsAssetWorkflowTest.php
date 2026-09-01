@@ -473,6 +473,28 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->assertSame('menunggu_inspeksi', $loan->fresh()->status);
     }
 
+    public function test_return_accepts_an_item_without_a_configured_checklist(): void
+    {
+        $loan = Loan::where('trx_no', 'TRX-1042')->firstOrFail();
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $item = $loan->items()->with(['toolType', 'unit'])->firstOrFail();
+        $item->toolType->update(['checklist' => []]);
+
+        $this->actingAs($staff)->post(route('loans.return', $loan), [
+            'inspections' => [
+                $item->id => [
+                    'status' => 'sesuai',
+                    'note' => 'oke',
+                    'photo' => UploadedFile::fake()->image('return-matched.jpg'),
+                ],
+            ],
+        ])->assertRedirect(route('loans.show', $loan));
+
+        $this->assertSame('sesuai', $item->fresh()->return_status);
+        $this->assertSame([], $item->fresh()->return_checklist);
+        $this->assertSame('tersedia', $item->unit->fresh()->status);
+    }
+
     public function test_borrower_cannot_open_staff_registry(): void
     {
         $user = User::where('email', 'user@tams.id')->firstOrFail();

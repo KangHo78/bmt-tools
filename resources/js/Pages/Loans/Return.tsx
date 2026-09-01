@@ -41,8 +41,16 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
     const item = loan.items[current];
-    const update = (patch: Partial<Inspection>) =>
+    const update = (patch: Partial<Inspection>) => {
         setValues({ ...values, [item.id]: { ...values[item.id], ...patch } });
+        setErrors((currentErrors) =>
+            Object.fromEntries(
+                Object.entries(currentErrors).filter(
+                    ([key]) => !key.startsWith(`inspections.${item.id}.`),
+                ),
+            ),
+        );
+    };
     const readyEntries = Object.entries(values).filter(
         ([, value]) =>
             value.status &&
@@ -246,14 +254,18 @@ export default function ReturnFlow({ loan }: { loan: Loan }) {
                                     placeholder="Wajib dijelaskan jika rusak, tidak lengkap, atau hilang..."
                                 />
                             </label>
-                            {Object.keys(errors).some((k) =>
-                                k.includes(String(item.id)),
-                            ) && (
-                                <p className="mt-3 text-sm text-red">
-                                    {errors[`inspections.${item.id}.note`] ??
-                                        "Lengkapi status, bukti, dan kronologi unit ini."}
-                                </p>
-                            )}
+                            {Object.entries(errors)
+                                .filter(([key]) =>
+                                    key.startsWith(`inspections.${item.id}.`),
+                                )
+                                .map(([key, message]) => (
+                                    <p
+                                        key={key}
+                                        className="mt-3 text-sm text-red"
+                                    >
+                                        {message}
+                                    </p>
+                                ))}
                             <div className="mt-6 flex justify-between border-t pt-5">
                                 <button
                                     disabled={current === 0}

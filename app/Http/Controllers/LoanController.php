@@ -197,10 +197,15 @@ class LoanController extends Controller
 
     public function completeReturn(Request $request, Loan $loan)
     {
-        $data = $request->validate(['inspections' => ['required', 'array'], 'inspections.*.status' => ['required', Rule::in(['sesuai', 'rusak', 'tidak_lengkap', 'hilang'])], 'inspections.*.note' => ['nullable', 'string', 'max:1000'], 'inspections.*.checklist' => ['required', 'array'], 'inspections.*.photo' => ['required', 'image', 'max:5120']]);
+        $data = $request->validate(['inspections' => ['required', 'array'], 'inspections.*.status' => ['required', Rule::in(['sesuai', 'rusak', 'tidak_lengkap', 'hilang'])], 'inspections.*.note' => ['nullable', 'string', 'max:1000'], 'inspections.*.checklist' => ['sometimes', 'array'], 'inspections.*.photo' => ['required', 'image', 'max:5120']]);
+        foreach ($data['inspections'] as &$inspection) {
+            $inspection['checklist'] ??= [];
+        }
+        unset($inspection);
         foreach ($data['inspections'] as $id => &$inspection) {
             $inspection['photos'] = [$request->file("inspections.{$id}.photo")->store('return-inspections', 'public')];
         }
+        unset($inspection);
         $result = $this->service->completeReturn($loan, $request->user(), $data['inspections']);
 
         $message = $result['completed']
