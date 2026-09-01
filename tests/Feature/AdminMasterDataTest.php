@@ -214,6 +214,33 @@ class AdminMasterDataTest extends TestCase
         ]);
     }
 
+    public function test_receipt_form_loads_npb_without_optional_email_or_created_date_columns(): void
+    {
+        $staff = User::factory()->create(['role' => 'petugas']);
+        $category = Category::create(['name' => 'Tools NPB']);
+        $location = Location::create(['name' => 'Rak NPB', 'type' => 'rak']);
+        $source = SsoItem::tools()->where('item_no', '603840')->firstOrFail();
+
+        ToolType::create([
+            'sso_item_id' => $source->id,
+            'code' => $source->item_no,
+            'name' => $source->item_name,
+            'category_id' => $category->id,
+            'primary_location_id' => $location->id,
+            'unit' => $source->unit,
+        ]);
+
+        $this->actingAs($staff)->get(route('inventory.receipts.create'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Inventory/CreateReceipt')
+                ->where('ssoUnavailable', false)
+                ->where('npbMessage', null)
+                ->has('npbs', 1)
+                ->where('npbs.0.id', 20)
+                ->where('npbs.0.items.0.id', 30));
+    }
+
     public function test_administrator_can_update_and_delete_unused_master_data(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);

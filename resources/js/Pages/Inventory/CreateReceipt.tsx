@@ -67,12 +67,14 @@ export default function CreateReceipt({
     ownerUsers,
     npbs,
     ssoUnavailable,
+    npbMessage,
 }: {
     toolTypes: ToolTypeOption[];
     locations: LocationOption[];
     ownerUsers: OwnerUser[];
     npbs: Npb[];
     ssoUnavailable: boolean;
+    npbMessage?: string | null;
 }) {
     const [form, setForm] = useState({
         request_reference: "",
@@ -309,11 +311,16 @@ export default function CreateReceipt({
                             <button
                                 type="button"
                                 onClick={() => setNpbOpen(true)}
-                                disabled={ssoUnavailable || !npbs.length}
                                 className="btn-secondary !border-amber/50 !bg-amber/10"
+                                title={
+                                    npbMessage ?? `${npbs.length} NPB tersedia`
+                                }
                             >
                                 <ClipboardList size={16} />
                                 Add from NPB
+                                <span className="rounded-full bg-ink/10 px-1.5 py-0.5 font-num text-[9px]">
+                                    {npbs.length}
+                                </span>
                             </button>
                         }
                     />
@@ -679,6 +686,12 @@ export default function CreateReceipt({
                     }
                     close={() => setNpbOpen(false)}
                     append={appendNpbs}
+                    emptyMessage={npbMessage}
+                    retry={() =>
+                        router.reload({
+                            only: ["npbs", "ssoUnavailable", "npbMessage"],
+                        })
+                    }
                 />
             )}
         </TamsLayout>
@@ -690,11 +703,15 @@ function NpbModal({
     existingItemIds,
     close,
     append,
+    emptyMessage,
+    retry,
 }: {
     npbs: Npb[];
     existingItemIds: Set<number>;
     close: () => void;
     append: (npbs: Npb[]) => void;
+    emptyMessage?: string | null;
+    retry: () => void;
 }) {
     const [query, setQuery] = useState("");
     const [selected, setSelected] = useState<number[]>([]);
@@ -871,9 +888,22 @@ function NpbModal({
                             );
                         })}
                         {!filtered.length && (
-                            <p className="p-10 text-center text-sm text-muted">
-                                NPB tidak ditemukan.
-                            </p>
+                            <div className="p-10 text-center">
+                                <p className="text-sm font-semibold">
+                                    NPB belum dapat ditampilkan
+                                </p>
+                                <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-muted">
+                                    {emptyMessage ??
+                                        "NPB tidak ditemukan untuk pencarian ini."}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={retry}
+                                    className="btn-secondary mt-4"
+                                >
+                                    Muat Ulang NPB
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>

@@ -64,13 +64,14 @@ class InventoryController extends Controller
         $ownerUsers = collect();
         $npbs = collect();
         $ssoUnavailable = false;
+        $npbMessage = null;
 
         try {
             $ownerUsers = SsoUser::query()
                 ->where('is_active', 1)
                 ->where('is_group', 0)
                 ->orderBy('name')
-                ->get(['id', 'name', 'username', 'email']);
+                ->get(['id', 'name', 'username']);
 
             $sourceIds = $sourceMap->keys();
             if ($sourceIds->isNotEmpty()) {
@@ -81,7 +82,7 @@ class InventoryController extends Controller
                         'requester:id,name',
                         'items' => fn ($query) => $query->whereIn('item_id', $sourceIds)->with('item:id,item_no,item_name,unit'),
                     ])
-                    ->latest('created_date')
+                    ->latest('id')
                     ->limit(100)
                     ->get()
                     ->map(function (SsoNpb $npb) use ($sourceMap): array {
@@ -89,7 +90,7 @@ class InventoryController extends Controller
                             'id' => $npb->id,
                             'reference' => $this->npbReference($npb),
                             'requester' => $npb->requester?->name,
-                            'date' => $npb->created_date,
+                            'date' => $npb->created_date ?? $npb->created_at ?? null,
                             'items' => $npb->items->map(function (SsoNpbItem $item) use ($sourceMap): array {
                                 $toolType = $sourceMap[$item->item_id];
 
@@ -105,9 +106,15 @@ class InventoryController extends Controller
                             })->values(),
                         ];
                     });
+                if ($npbs->isEmpty()) {
+                    $npbMessage = 'Belum ada NPB aktif yang itemnya terhubung dengan Master Aset.';
+                }
+            } else {
+                $npbMessage = 'Belum ada Master Aset yang terhubung dengan item BMT Multi.';
             }
         } catch (\Throwable) {
             $ssoUnavailable = true;
+            $npbMessage = 'Koneksi data NPB BMT Multi belum tersedia. Coba muat ulang.';
         }
 
         return Inertia::render('Inventory/CreateReceipt', [
@@ -116,6 +123,7 @@ class InventoryController extends Controller
             'ownerUsers' => $ownerUsers,
             'npbs' => $npbs,
             'ssoUnavailable' => $ssoUnavailable,
+            'npbMessage' => $npbMessage,
         ]);
     }
 
@@ -215,7 +223,7 @@ class InventoryController extends Controller
     {
         return filled($npb->npb__no)
             ? $npb->npb__no
-            : sprintf('%04d/NPB/%s', $npb->idx, date('m/Y', strtotime($npb->created_date)));
+            : sprintf('%04d/NPB/%s', $npb->idx ?? $npb->id, date('m/Y', strtotime($npb->created_date ?? 'now')));
     }
 
     public function showReceipt(AssetReceipt $receipt)

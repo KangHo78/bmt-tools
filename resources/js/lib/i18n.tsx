@@ -489,6 +489,33 @@ const copy: Copy[] = [
     ["Penerimaan Terbaru", "Penerimaan Terbaru", "Recent Receipts"],
     ["Receiving workflow", "Alur penerimaan", "Receiving Workflow"],
     ["Dokumen Penerimaan", "Dokumen Penerimaan", "Receiving Document"],
+    ["Add from NPB", "Tambah dari NPB", "Add from NPB"],
+    [
+        "NPB belum dapat ditampilkan",
+        "NPB belum dapat ditampilkan",
+        "NPB cannot be displayed yet",
+    ],
+    ["Muat Ulang NPB", "Muat Ulang NPB", "Reload NPB"],
+    [
+        "Belum ada NPB aktif yang itemnya terhubung dengan Master Aset.",
+        "Belum ada NPB aktif yang itemnya terhubung dengan Master Aset.",
+        "There are no active NPB records whose items are linked to the Asset Master.",
+    ],
+    [
+        "Belum ada Master Aset yang terhubung dengan item BMT Multi.",
+        "Belum ada Master Aset yang terhubung dengan item BMT Multi.",
+        "No Asset Master is linked to a BMT Multi item yet.",
+    ],
+    [
+        "Koneksi data NPB BMT Multi belum tersedia. Coba muat ulang.",
+        "Koneksi data NPB BMT Multi belum tersedia. Coba muat ulang.",
+        "The BMT Multi NPB data connection is unavailable. Try reloading it.",
+    ],
+    [
+        "NPB tidak ditemukan untuk pencarian ini.",
+        "NPB tidak ditemukan untuk pencarian ini.",
+        "No NPB matched this search.",
+    ],
     ["Ubah Dokumen", "Ubah Dokumen", "Edit Document"],
     ["Ubah Data Penerimaan", "Ubah Data Penerimaan", "Edit Receipt Data"],
     [
