@@ -55,6 +55,44 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->assertSame($before + 1, $user->fresh()->token_used);
     }
 
+    public function test_dashboard_lists_only_approvals_actionable_by_the_current_user(): void
+    {
+        $owner = User::where('email', 'user@tams.id')->firstOrFail();
+        $head = User::where('email', 'kepala@tams.id')->firstOrFail();
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $loan = Loan::where('trx_no', 'TRX-1058')->firstOrFail();
+
+        $this->actingAs($owner)->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard')
+                ->where('showApprovalQueue', true)
+                ->has('pendingApprovals', 1)
+                ->where('pendingApprovals.0.type', 'owner')
+                ->where('pendingApprovals.0.loan.id', $loan->id));
+
+        $this->actingAs($head)->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('showApprovalQueue', true)
+                ->has('pendingApprovals', 0));
+
+        $this->actingAs($owner)->post(route('loans.approve', $loan))->assertRedirect();
+
+        $this->actingAs($head)->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('pendingApprovals', 1)
+                ->where('pendingApprovals.0.type', 'logistik')
+                ->where('pendingApprovals.0.loan.id', $loan->id));
+
+        $this->actingAs($staff)->get(route('dashboard'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('showApprovalQueue', false)
+                ->has('pendingApprovals', 0));
+    }
+
     public function test_user_can_borrow_multiple_units_of_the_same_tool_type(): void
     {
         $user = User::where('email', 'andi@tams.id')->firstOrFail();

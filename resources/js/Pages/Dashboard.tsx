@@ -7,6 +7,7 @@ import {
     CheckSquare,
     ClipboardCheck,
     Clock3,
+    Eye,
     Wrench,
 } from "lucide-react";
 import TamsLayout from "@/Layouts/TamsLayout";
@@ -23,12 +24,23 @@ import type { Loan, PageProps } from "@/types/tams";
 interface Props {
     metrics: Record<string, number>;
     loans: Loan[];
+    pendingApprovals: DashboardApproval[];
+    showApprovalQueue: boolean;
     maintenance: any[];
     audit?: any;
 }
+
+interface DashboardApproval {
+    id: number;
+    type: "owner" | "logistik";
+    loan: Loan;
+}
+
 export default function Dashboard({
     metrics,
     loans,
+    pendingApprovals = [],
+    showApprovalQueue = false,
     maintenance,
     audit,
 }: Props) {
@@ -66,6 +78,9 @@ export default function Dashboard({
                     </Link>
                 }
             />
+            {showApprovalQueue && (
+                <ApprovalQueue approvals={pendingApprovals} />
+            )}
             {isUser ? (
                 <UserBoard user={user} loans={loans} />
             ) : (
@@ -78,6 +93,98 @@ export default function Dashboard({
                 />
             )}
         </TamsLayout>
+    );
+}
+
+function ApprovalQueue({ approvals }: { approvals: DashboardApproval[] }) {
+    return (
+        <Panel className="mb-5 overflow-hidden border-t-4 !border-t-amber">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b p-5">
+                <div>
+                    <p className="label">Kotak Keputusan</p>
+                    <h2 className="font-display text-2xl font-bold">
+                        Menunggu Approval
+                    </h2>
+                    <p className="mt-1 text-xs text-muted">
+                        Buka detail transaksi untuk memeriksa data sebelum
+                        memberikan keputusan.
+                    </p>
+                </div>
+                <span className="rounded-full bg-amber/15 px-3 py-1 font-num text-sm font-bold text-amber-ink">
+                    {approvals.length} antrean
+                </span>
+            </div>
+
+            <div className="hidden grid-cols-[110px_1fr_1.3fr_150px_130px_32px] gap-4 border-b bg-canvas/70 px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-muted md:grid">
+                <span>Transaksi</span>
+                <span>Peminjam</span>
+                <span>Keperluan & Alat</span>
+                <span>Periode</span>
+                <span>Tahap</span>
+                <span />
+            </div>
+
+            {approvals.length ? (
+                approvals.map((approval) => {
+                    const loan = approval.loan;
+                    const toolNames = loan.items
+                        .map((item) => item.tool_type.name)
+                        .join(" · ");
+
+                    return (
+                        <Link
+                            key={approval.id}
+                            href={`/peminjaman/${loan.id}`}
+                            className="group grid gap-3 border-b px-5 py-4 last:border-0 hover:bg-amber/5 md:grid-cols-[110px_1fr_1.3fr_150px_130px_32px] md:items-center md:gap-4"
+                        >
+                            <div>
+                                <span className="font-num text-sm font-bold text-green">
+                                    {loan.trx_no}
+                                </span>
+                                <p className="mt-1 text-[10px] text-muted md:hidden">
+                                    Transaksi
+                                </p>
+                            </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold">
+                                    {loan.borrower.name}
+                                </p>
+                                <p className="truncate text-xs text-muted">
+                                    {loan.borrower.institution || "—"}
+                                </p>
+                            </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold">
+                                    {loan.purpose}
+                                </p>
+                                <p className="truncate text-xs text-muted">
+                                    {toolNames}
+                                </p>
+                            </div>
+                            <p className="font-num text-xs text-muted">
+                                {formatDate(loan.start_date)} –{" "}
+                                {formatDate(loan.due_date)}
+                            </p>
+                            <div>
+                                <span className="inline-flex rounded bg-amber/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-ink">
+                                    {approval.type === "owner"
+                                        ? "Approval Owner"
+                                        : "Approval Logistik"}
+                                </span>
+                            </div>
+                            <Eye
+                                size={18}
+                                className="text-muted transition group-hover:text-green"
+                            />
+                        </Link>
+                    );
+                })
+            ) : (
+                <div className="p-8 text-center text-sm text-muted">
+                    Tidak ada approval yang menunggu keputusan Anda.
+                </div>
+            )}
+        </Panel>
     );
 }
 
