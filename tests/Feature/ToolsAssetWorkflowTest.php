@@ -511,6 +511,37 @@ class ToolsAssetWorkflowTest extends TestCase
         $this->assertSame('menunggu_inspeksi', $loan->fresh()->status);
     }
 
+    public function test_related_case_is_visible_from_loan_and_case_search_supports_borrower_item_and_token(): void
+    {
+        $staff = User::where('email', 'petugas@tams.id')->firstOrFail();
+        $loan = Loan::where('trx_no', 'TRX-1042')->firstOrFail();
+        $item = $loan->items()->with(['unit.toolType', 'physicalToken'])->firstOrFail();
+        $case = AssetCase::create([
+            'case_no' => 'KSS-SEARCH-001',
+            'type' => 'rusak',
+            'stage' => 'dilaporkan',
+            'unit_id' => $item->unit_id,
+            'loan_id' => $loan->id,
+            'responsible_user_id' => $loan->user_id,
+            'chronology' => 'Kasus pengujian pencarian pengembalian.',
+        ]);
+
+        $this->actingAs($staff)->get(route('loans.show', $loan))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Loans/Show')
+                ->where('loan.cases', fn ($cases) => collect($cases)->contains('id', $case->id)));
+
+        foreach ([$loan->borrower->name, $item->unit->toolType->name, $item->physicalToken->code] as $search) {
+            $this->actingAs($staff)->get(route('cases.index', ['q' => $search]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->component('Cases/Index')
+                    ->where('filters.q', $search)
+                    ->where('cases.data', fn ($cases) => collect($cases)->contains('id', $case->id)));
+        }
+    }
+
     public function test_return_accepts_an_item_without_a_configured_checklist(): void
     {
         $loan = Loan::where('trx_no', 'TRX-1042')->firstOrFail();

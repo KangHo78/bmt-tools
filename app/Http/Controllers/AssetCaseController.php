@@ -15,9 +15,38 @@ use Inertia\Inertia;
 
 class AssetCaseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Inertia::render('Cases/Index', ['cases' => AssetCase::with(['unit.toolType', 'responsibleUser:id,name,institution'])->latest()->get()]);
+        $search = trim((string) $request->q);
+        $cases = AssetCase::query()
+            ->with([
+                'unit.toolType:id,name,code',
+                'responsibleUser:id,name,institution',
+                'loan.borrower:id,name,institution',
+                'loan.items.physicalToken:id,code',
+            ])
+            ->when($search, fn ($query, $term) => $query->where(function ($query) use ($term) {
+                $query->where('case_no', 'like', "%{$term}%")
+                    ->orWhere('chronology', 'like', "%{$term}%")
+                    ->orWhereHas('responsibleUser', fn ($userQuery) => $userQuery->where('name', 'like', "%{$term}%"))
+                    ->orWhereHas('loan.borrower', fn ($borrowerQuery) => $borrowerQuery
+                        ->where('name', 'like', "%{$term}%")
+                        ->orWhere('institution', 'like', "%{$term}%"))
+                    ->orWhereHas('loan', fn ($loanQuery) => $loanQuery->where('trx_no', 'like', "%{$term}%"))
+                    ->orWhereHas('unit', fn ($unitQuery) => $unitQuery->where('asset_code', 'like', "%{$term}%"))
+                    ->orWhereHas('unit.toolType', fn ($toolQuery) => $toolQuery
+                        ->where('name', 'like', "%{$term}%")
+                        ->orWhere('code', 'like', "%{$term}%"))
+                    ->orWhereHas('loan.items.physicalToken', fn ($tokenQuery) => $tokenQuery->where('code', 'like', "%{$term}%"));
+            }))
+            ->latest()
+            ->paginate(18)
+            ->withQueryString();
+
+        return Inertia::render('Cases/Index', [
+            'cases' => $cases,
+            'filters' => ['q' => $search],
+        ]);
     }
 
     public function show(AssetCase $case)

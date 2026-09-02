@@ -6,6 +6,7 @@ import {
     CalendarPlus,
     Check,
     ClipboardCheck,
+    FileWarning,
     FileText,
     MapPin,
     PackageCheck,
@@ -142,6 +143,44 @@ export default function Show({
             </div>
             <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
                 <div className="space-y-5">
+                    {(loan.cases?.length ?? 0) > 0 && (
+                        <Panel className="overflow-hidden border-l-4 !border-l-amber">
+                            <div className="flex items-center gap-3 border-b bg-amber/10 p-5">
+                                <span className="grid size-10 place-items-center rounded bg-amber text-ink">
+                                    <FileWarning size={20} />
+                                </span>
+                                <div>
+                                    <p className="label">Kasus Terkait</p>
+                                    <h2 className="font-display text-2xl font-bold">
+                                        Perlu Tindak Lanjut
+                                    </h2>
+                                </div>
+                            </div>
+                            {loan.cases?.map((assetCase) => (
+                                <Link
+                                    key={assetCase.id}
+                                    href={`/kasus/${assetCase.id}`}
+                                    className="group flex flex-wrap items-center gap-3 border-b p-4 last:border-0 hover:bg-amber/5"
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-num text-xs font-bold text-green">
+                                            {assetCase.case_no}
+                                        </p>
+                                        <p className="mt-1 font-display text-lg font-bold capitalize">
+                                            {assetCase.type.replaceAll(
+                                                "_",
+                                                " ",
+                                            )}
+                                        </p>
+                                    </div>
+                                    <StatusBadge status={assetCase.stage} />
+                                    <span className="btn-secondary !min-h-9 !px-3">
+                                        Buka Kasus
+                                    </span>
+                                </Link>
+                            ))}
+                        </Panel>
+                    )}
                     <Panel className="overflow-hidden">
                         <div className="border-b p-5">
                             <p className="label">Manifest alat</p>
