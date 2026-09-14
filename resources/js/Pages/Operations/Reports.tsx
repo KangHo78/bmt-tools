@@ -1,454 +1,180 @@
 import { Head, Link } from "@inertiajs/react";
 import {
+    AlertTriangle,
+    ArrowUpRight,
     Boxes,
-    Download,
+    ClipboardList,
+    FileClock,
     ListTree,
-    PackageCheck,
-    Printer,
-    Search,
-    ShieldAlert,
+    ScanLine,
+    Sparkles,
     UserRound,
-    Users,
     Wrench,
 } from "lucide-react";
-import { useMemo, useState } from "react";
 import TamsLayout from "@/Layouts/TamsLayout";
-import { PageHeader, Panel, StatusBadge } from "@/Components/TamsUI";
-import { formatDate } from "@/lib/ui";
+import { PageHeader, Panel } from "@/Components/TamsUI";
 
-type ActiveUsage = {
-    id: number;
-    trx_no: string;
-    borrower?: { id: number; name: string; institution?: string };
-    usage_type: string;
-    location_text: string;
-    due_date: string;
-    status: string;
-    items: Array<{
-        id: number;
-        name: string;
-        code: string;
-        asset_code?: string;
-    }>;
-};
+const reports = [
+    {
+        key: "assets",
+        href: "/laporan/aset",
+        label: "Laporan Aset",
+        description: "Posisi, kondisi, lokasi, dan status seluruh unit aset.",
+        icon: Boxes,
+        accent: "bg-green",
+    },
+    {
+        key: "loans",
+        href: "/laporan/peminjaman",
+        label: "Laporan Peminjaman",
+        description:
+            "Riwayat transaksi, volume bulanan, dan status peminjaman.",
+        icon: ClipboardList,
+        accent: "bg-amber",
+    },
+    {
+        key: "active_users",
+        href: "/laporan/pengguna-aktif",
+        label: "Pengguna Aktif",
+        description: "Peminjam yang masih memegang unit dan tenggatnya.",
+        icon: UserRound,
+        accent: "bg-blue",
+    },
+    {
+        key: "borrowed_items",
+        href: "/laporan/item-dipinjam",
+        label: "Item Dipinjam",
+        description:
+            "Sirkulasi aktif yang dikelompokkan berdasarkan jenis alat.",
+        icon: ListTree,
+        accent: "bg-ink",
+    },
+    {
+        key: "audits",
+        href: "/laporan/audit",
+        label: "Laporan Audit",
+        description:
+            "Rekap stock opname, cakupan, progres, dan hasil pemeriksaan.",
+        icon: ScanLine,
+        accent: "bg-red",
+    },
+] as const;
 
-type BorrowedItem = {
-    tool_type_id: number;
-    name: string;
-    code: string;
-    total_borrowed: number;
-    units: Array<{
-        asset_code?: string;
-        loan_id: number;
-        trx_no: string;
-        borrower_name?: string;
-        due_date: string;
-        status: string;
-    }>;
-};
+const recommendations = [
+    {
+        icon: Wrench,
+        label: "Pemeliharaan & Biaya",
+        note: "jadwal, downtime, vendor, dan total biaya",
+    },
+    {
+        icon: AlertTriangle,
+        label: "Kerusakan & Kehilangan",
+        note: "kasus, penyelesaian, dan aset pengganti",
+    },
+    {
+        icon: FileClock,
+        label: "Penerimaan & Mutasi",
+        note: "aset masuk dan perpindahan antar lokasi",
+    },
+    {
+        icon: Sparkles,
+        label: "Utilisasi Alat",
+        note: "alat paling sering/jarang digunakan dan idle time",
+    },
+];
 
 export default function Reports({
-    summary,
-    byStatus,
-    monthlyLoans,
-    activeUsage,
-    borrowedByItem,
+    counts,
 }: {
-    summary: Record<string, number>;
-    byStatus: any[];
-    monthlyLoans: any[];
-    activeUsage: ActiveUsage[];
-    borrowedByItem: BorrowedItem[];
+    counts: Record<string, number>;
 }) {
-    const max = Math.max(1, ...byStatus.map((x) => Number(x.total)));
-    const [detailView, setDetailView] = useState<"users" | "items">("users");
-    const [query, setQuery] = useState("");
-    const normalizedQuery = query.trim().toLocaleLowerCase("id-ID");
-    const filteredUsers = useMemo(
-        () =>
-            activeUsage.filter((row) =>
-                `${row.borrower?.name ?? ""} ${row.borrower?.institution ?? ""} ${row.trx_no} ${row.items.map((item) => `${item.code} ${item.name} ${item.asset_code ?? ""}`).join(" ")}`
-                    .toLocaleLowerCase("id-ID")
-                    .includes(normalizedQuery),
-            ),
-        [activeUsage, normalizedQuery],
-    );
-    const filteredItems = useMemo(
-        () =>
-            borrowedByItem.filter((row) =>
-                `${row.code} ${row.name} ${row.units.map((unit) => `${unit.asset_code ?? ""} ${unit.borrower_name ?? ""} ${unit.trx_no}`).join(" ")}`
-                    .toLocaleLowerCase("id-ID")
-                    .includes(normalizedQuery),
-            ),
-        [borrowedByItem, normalizedQuery],
-    );
     return (
         <TamsLayout>
-            <Head title="Laporan" />
+            <Head title="Pusat Laporan" />
             <PageHeader
-                eyebrow="Management insight"
-                title="Laporan Aset"
-                description="Snapshot ketersediaan, sirkulasi, dan risiko aset Workshop Trowulan."
-                action={
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            onClick={() => window.print()}
-                            className="btn-secondary"
-                        >
-                            <Printer size={16} />
-                            Cetak / Simpan PDF
-                        </button>
-                        <a
-                            href="/laporan/ekspor/assets"
-                            className="btn-secondary"
-                        >
-                            <Download size={16} />
-                            Aset CSV
-                        </a>
-                        <a
-                            href="/laporan/ekspor/loans"
-                            className="btn-secondary"
-                        >
-                            <Download size={16} />
-                            Pinjaman CSV
-                        </a>
-                        <a
-                            href="/laporan/ekspor/audits"
-                            className="btn-secondary"
-                        >
-                            <Download size={16} />
-                            Audit CSV
-                        </a>
-                        <a
-                            href="/laporan/ekspor/active-users"
-                            className="btn-secondary"
-                        >
-                            <Download size={16} />
-                            Pengguna Aktif CSV
-                        </a>
-                        <a
-                            href="/laporan/ekspor/borrowed-items"
-                            className="btn-secondary"
-                        >
-                            <Download size={16} />
-                            Item Dipinjam CSV
-                        </a>
-                    </div>
-                }
+                eyebrow="Management reports"
+                title="Pusat Laporan"
+                description="Setiap laporan kini berdiri sendiri agar lebih mudah dibaca, dicetak, dan diekspor."
             />
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-                <Metric value={summary.total} label="Total Unit" icon={Boxes} />
-                <Metric
-                    value={summary.available}
-                    label="Tersedia"
-                    icon={PackageCheck}
-                />
-                <Metric
-                    value={summary.borrowed}
-                    label="Dipinjam"
-                    icon={Boxes}
-                />
-                <Metric
-                    value={summary.maintenance}
-                    label="Perawatan"
-                    icon={Wrench}
-                />
-                <Metric
-                    value={summary.lost_or_damaged}
-                    label="Rusak/Hilang"
-                    icon={ShieldAlert}
-                />
-                <Metric
-                    value={summary.active_users}
-                    label="Pengguna Aktif"
-                    icon={Users}
-                />
-            </div>
-            <div className="mt-5 grid gap-5 xl:grid-cols-2">
-                <Panel className="p-5">
-                    <p className="label">Distribusi kondisi</p>
-                    <h2 className="font-display text-2xl font-bold">
-                        Status Unit
-                    </h2>
-                    <div className="mt-6 space-y-4">
-                        {byStatus.map((x) => (
-                            <div
-                                key={x.status}
-                                className="grid grid-cols-[130px_1fr_40px] items-center gap-3"
-                            >
-                                <StatusBadge status={x.status} />
-                                <div className="h-3 rounded-sm bg-line">
-                                    <div
-                                        className="h-full rounded-sm bg-green"
-                                        style={{
-                                            width: `${(Number(x.total) / max) * 100}%`,
-                                        }}
-                                    />
-                                </div>
-                                <span className="font-num text-right text-sm font-bold">
-                                    {x.total}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </Panel>
-                <Panel className="p-5">
-                    <p className="label">Volume permohonan</p>
-                    <h2 className="font-display text-2xl font-bold">
-                        Peminjaman Bulanan
-                    </h2>
-                    <div className="mt-6 flex h-52 items-end gap-3 border-b border-l p-4">
-                        {monthlyLoans.map((x) => (
-                            <div
-                                key={x.period}
-                                className="flex h-full flex-1 flex-col justify-end text-center"
-                            >
-                                <span className="mb-2 font-num text-xs font-bold">
-                                    {x.total}
-                                </span>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {reports.map(
+                    (
+                        { key, href, label, description, icon: Icon, accent },
+                        index,
+                    ) => (
+                        <Link key={key} href={href} className="group">
+                            <Panel className="relative h-full overflow-hidden p-5 transition duration-200 group-hover:-translate-y-1 group-hover:border-ink group-hover:shadow-lg">
                                 <div
-                                    className="mx-auto w-full max-w-16 bg-amber"
-                                    style={{
-                                        height: `${Math.max(8, Number(x.total) * 30)}px`,
-                                    }}
+                                    className={`absolute inset-x-0 top-0 h-1 ${accent}`}
                                 />
-                                <span className="mt-2 text-[10px] text-muted">
-                                    {x.period}
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="grid size-11 place-items-center rounded-md border border-line bg-canvas text-ink">
+                                        <Icon size={21} />
+                                    </div>
+                                    <span className="font-num text-[10px] font-bold tracking-[.18em] text-muted">
+                                        REPORT{" "}
+                                        {String(index + 1).padStart(2, "0")}
+                                    </span>
+                                </div>
+                                <p className="mt-8 font-num text-4xl font-semibold">
+                                    {counts[key] ?? 0}
+                                </p>
+                                <h2 className="mt-3 font-display text-2xl font-bold">
+                                    {label}
+                                </h2>
+                                <p className="mt-1 min-h-10 text-sm leading-relaxed text-muted">
+                                    {description}
+                                </p>
+                                <span className="mt-5 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-green">
+                                    Buka laporan{" "}
+                                    <ArrowUpRight
+                                        size={15}
+                                        className="transition group-hover:translate-x-1 group-hover:-translate-y-1"
+                                    />
+                                </span>
+                            </Panel>
+                        </Link>
+                    ),
+                )}
+            </div>
+
+            <Panel className="mt-6 overflow-hidden">
+                <div className="grid lg:grid-cols-[.7fr_1.3fr]">
+                    <div className="bg-ink p-6 text-white">
+                        <p className="font-num text-[10px] font-bold uppercase tracking-[.2em] text-amber">
+                            Gap analysis
+                        </p>
+                        <h2 className="mt-2 font-display text-3xl font-bold">
+                            Laporan yang belum tersedia
+                        </h2>
+                        <p className="mt-3 max-w-md text-sm leading-relaxed text-white/60">
+                            Data dasarnya sudah dicatat oleh modul operasional.
+                            Empat laporan ini paling masuk akal untuk tahap
+                            berikutnya.
+                        </p>
+                    </div>
+                    <div className="grid sm:grid-cols-2">
+                        {recommendations.map(({ icon: Icon, label, note }) => (
+                            <div
+                                key={label}
+                                className="border-b border-line p-5 sm:border-l"
+                            >
+                                <Icon size={19} className="text-green" />
+                                <h3 className="mt-4 font-display text-lg font-bold">
+                                    {label}
+                                </h3>
+                                <p className="mt-1 text-xs leading-relaxed text-muted">
+                                    {note}
+                                </p>
+                                <span className="mt-3 inline-block rounded-full border border-line bg-canvas px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted">
+                                    Belum tersedia
                                 </span>
                             </div>
                         ))}
-                    </div>
-                </Panel>
-            </div>
-            <Panel className="mt-5 overflow-hidden">
-                <div className="border-b border-line bg-ink p-5 text-white">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div>
-                            <p className="font-num text-[10px] font-bold uppercase tracking-[.18em] text-amber">
-                                Live circulation register
-                            </p>
-                            <h2 className="mt-1 font-display text-3xl font-bold">
-                                Detail Penggunaan Aktif
-                            </h2>
-                            <p className="mt-1 text-sm text-white/60">
-                                Hanya menampilkan unit yang belum dikembalikan.
-                            </p>
-                        </div>
-                        <div className="relative w-full lg:max-w-sm">
-                            <Search
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-white/45"
-                                size={16}
-                            />
-                            <input
-                                type="search"
-                                value={query}
-                                onChange={(event) =>
-                                    setQuery(event.target.value)
-                                }
-                                placeholder="Cari user, transaksi, kode, atau item..."
-                                className="control border-white/20 bg-white/10 pl-10 text-white placeholder:text-white/40"
-                            />
-                        </div>
-                    </div>
-                    <div className="mt-5 flex gap-2">
-                        <DetailTab
-                            active={detailView === "users"}
-                            onClick={() => setDetailView("users")}
-                            icon={UserRound}
-                            label="Berdasarkan Pengguna"
-                            count={activeUsage.length}
-                        />
-                        <DetailTab
-                            active={detailView === "items"}
-                            onClick={() => setDetailView("items")}
-                            icon={ListTree}
-                            label="Berdasarkan Item"
-                            count={borrowedByItem.length}
-                        />
                     </div>
                 </div>
-                {detailView === "users" ? (
-                    <UsersReport rows={filteredUsers} />
-                ) : (
-                    <ItemsReport rows={filteredItems} />
-                )}
             </Panel>
         </TamsLayout>
-    );
-}
-
-function DetailTab({ active, onClick, icon: Icon, label, count }: any) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold transition ${active ? "border-amber bg-amber text-ink" : "border-white/20 text-white/65 hover:bg-white/10 hover:text-white"}`}
-        >
-            <Icon size={15} />
-            {label}
-            <span className="font-num">{count}</span>
-        </button>
-    );
-}
-
-function UsersReport({ rows }: { rows: ActiveUsage[] }) {
-    if (!rows.length) return <ReportEmpty />;
-    return (
-        <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-                <thead className="border-b bg-canvas text-[10px] uppercase tracking-wider text-muted">
-                    <tr>
-                        <th className="p-4">Peminjam</th>
-                        <th className="p-4">Transaksi</th>
-                        <th className="p-4">Item yang digunakan</th>
-                        <th className="p-4">Lokasi</th>
-                        <th className="p-4">Tenggat</th>
-                        <th className="p-4">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row) => (
-                        <tr
-                            key={row.id}
-                            className="border-b border-line align-top last:border-0 hover:bg-canvas/55"
-                        >
-                            <td className="p-4">
-                                <strong>{row.borrower?.name ?? "—"}</strong>
-                                <small className="mt-1 block text-muted">
-                                    {row.borrower?.institution ||
-                                        "Tanpa institusi"}
-                                </small>
-                            </td>
-                            <td className="p-4">
-                                <Link
-                                    href={`/peminjaman/${row.id}`}
-                                    className="font-num font-bold text-green hover:underline"
-                                >
-                                    {row.trx_no}
-                                </Link>
-                                <small className="mt-1 block capitalize text-muted">
-                                    {row.usage_type.replaceAll("_", " ")}
-                                </small>
-                            </td>
-                            <td className="p-4">
-                                <div className="space-y-1.5">
-                                    {row.items.map((item) => (
-                                        <div
-                                            key={item.id}
-                                            className="rounded border border-line bg-canvas/55 px-2.5 py-2"
-                                        >
-                                            <strong className="text-xs">
-                                                {item.name}
-                                            </strong>
-                                            <span className="ml-2 font-num text-[10px] text-muted">
-                                                {item.code} · {item.asset_code}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </td>
-                            <td className="p-4 text-xs">{row.location_text}</td>
-                            <td className="p-4 font-semibold">
-                                {formatDate(row.due_date)}
-                            </td>
-                            <td className="p-4">
-                                <StatusBadge status={row.status} />
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
-}
-
-function ItemsReport({ rows }: { rows: BorrowedItem[] }) {
-    if (!rows.length) return <ReportEmpty />;
-    return (
-        <div className="divide-y divide-line">
-            {rows.map((row) => (
-                <div
-                    key={row.tool_type_id}
-                    className="grid gap-4 p-5 lg:grid-cols-[240px_90px_1fr] lg:items-start"
-                >
-                    <div>
-                        <p className="font-num text-[10px] font-bold text-green">
-                            {row.code}
-                        </p>
-                        <h3 className="mt-1 font-display text-xl font-bold">
-                            {row.name}
-                        </h3>
-                    </div>
-                    <div className="rounded-md bg-amber/15 p-3 text-center">
-                        <p className="font-num text-2xl font-bold">
-                            {row.total_borrowed}
-                        </p>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                            Dipinjam
-                        </p>
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-2">
-                        {row.units.map((unit) => (
-                            <div
-                                key={`${unit.loan_id}-${unit.asset_code}`}
-                                className="grid grid-cols-[1fr_auto] gap-3 rounded-md border border-line bg-canvas/55 p-3"
-                            >
-                                <div>
-                                    <p className="font-num text-xs font-bold">
-                                        {unit.asset_code}
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted">
-                                        {unit.borrower_name || "—"}
-                                    </p>
-                                </div>
-                                <div className="text-right">
-                                    <Link
-                                        href={`/peminjaman/${unit.loan_id}`}
-                                        className="font-num text-[10px] font-bold text-green hover:underline"
-                                    >
-                                        {unit.trx_no}
-                                    </Link>
-                                    <p className="mt-1 text-[10px] text-muted">
-                                        {formatDate(unit.due_date)}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
-
-function ReportEmpty() {
-    return (
-        <div className="p-12 text-center">
-            <PackageCheck className="mx-auto text-muted" />
-            <p className="mt-3 font-display text-xl font-bold">
-                Tidak ada penggunaan aktif
-            </p>
-            <p className="mt-1 text-sm text-muted">
-                Ubah pencarian atau periksa kembali saat ada unit dipinjam.
-            </p>
-        </div>
-    );
-}
-function Metric({
-    value,
-    label,
-    icon: Icon,
-}: {
-    value: number;
-    label: string;
-    icon: any;
-}) {
-    return (
-        <Panel className="p-4">
-            <Icon className="text-green" size={20} />
-            <p className="mt-4 font-num text-3xl font-semibold">{value}</p>
-            <p className="text-xs font-semibold text-muted">{label}</p>
-        </Panel>
     );
 }

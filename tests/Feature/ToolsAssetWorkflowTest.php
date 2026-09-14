@@ -593,17 +593,36 @@ class ToolsAssetWorkflowTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Operations/Reports')
-                ->where('summary.active_users', fn ($value) => (int) $value > 0)
-                ->has('activeUsage', fn (Assert $rows) => $rows
+                ->where('counts.active_users', fn ($value) => (int) $value > 0)
+                ->where('counts.borrowed_items', fn ($value) => (int) $value > 0));
+
+        $this->get(route('reports.active-users'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Operations/ReportDetail')
+                ->where('kind', 'active-users')
+                ->has('rows', fn (Assert $rows) => $rows
                     ->each(fn (Assert $row) => $row
                         ->hasAll(['id', 'trx_no', 'borrower', 'usage_type', 'location_text', 'due_date', 'status', 'items'])
                         ->where('items', fn ($items) => collect($items)->isNotEmpty())
-                    ))
-                ->has('borrowedByItem', fn (Assert $rows) => $rows
+                    )));
+
+        $this->get(route('reports.borrowed-items'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Operations/ReportDetail')
+                ->where('kind', 'borrowed-items')
+                ->has('rows', fn (Assert $rows) => $rows
                     ->each(fn (Assert $row) => $row
                         ->hasAll(['tool_type_id', 'name', 'code', 'total_borrowed', 'units'])
                         ->where('units', fn ($units) => collect($units)->isNotEmpty())
                     )));
+
+        foreach (['reports.assets', 'reports.loans', 'reports.audits'] as $routeName) {
+            $this->get(route($routeName))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->component('Operations/ReportDetail'));
+        }
 
         $this->get(route('reports.export', 'active-users'))
             ->assertOk()

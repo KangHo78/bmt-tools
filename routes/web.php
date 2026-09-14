@@ -53,7 +53,12 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
     });
 
     Route::middleware('role:kepala_logistik,admin')->group(function () {
-        Route::get('/laporan', [OperationsController::class, 'reports'])->name('reports.index');
+        Route::get('/laporan', [ReportController::class, 'index'])->name('reports.index');
+        Route::get('/laporan/aset', [ReportController::class, 'assets'])->name('reports.assets');
+        Route::get('/laporan/peminjaman', [ReportController::class, 'loans'])->name('reports.loans');
+        Route::get('/laporan/audit', [ReportController::class, 'audits'])->name('reports.audits');
+        Route::get('/laporan/pengguna-aktif', [ReportController::class, 'activeUsers'])->name('reports.active-users');
+        Route::get('/laporan/item-dipinjam', [ReportController::class, 'borrowedItems'])->name('reports.borrowed-items');
         Route::get('/laporan/ekspor/{type}', [ReportController::class, 'export'])->name('reports.export');
     });
 
