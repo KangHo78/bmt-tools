@@ -59,6 +59,7 @@ Route::middleware(['auth', 'sso.group'])->group(function () {
         Route::get('/laporan/audit', [ReportController::class, 'audits'])->name('reports.audits');
         Route::get('/laporan/pengguna-aktif', [ReportController::class, 'activeUsers'])->name('reports.active-users');
         Route::get('/laporan/item-dipinjam', [ReportController::class, 'borrowedItems'])->name('reports.borrowed-items');
+        Route::get('/laporan/kasus', [ReportController::class, 'cases'])->name('reports.cases');
         Route::get('/laporan/ekspor/{type}', [ReportController::class, 'export'])->name('reports.export');
     });
 

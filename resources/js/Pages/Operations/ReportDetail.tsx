@@ -23,7 +23,13 @@ import {
 } from "@/Components/TamsUI";
 import { formatDate } from "@/lib/ui";
 
-type Kind = "assets" | "loans" | "audits" | "active-users" | "borrowed-items";
+type Kind =
+    | "assets"
+    | "loans"
+    | "audits"
+    | "active-users"
+    | "borrowed-items"
+    | "cases";
 type Props = {
     kind: Kind;
     summary: Record<string, number>;
@@ -67,6 +73,13 @@ const meta: Record<
         description: "Unit aktif yang dikelompokkan berdasarkan jenis alat.",
         exportLabel: "Ekspor Item",
     },
+    cases: {
+        title: "Laporan Kasus",
+        eyebrow: "Damage & loss register",
+        description:
+            "Kasus kerusakan dan kehilangan beserta dokumen dan progres penyelesaiannya.",
+        exportLabel: "Ekspor Kasus",
+    },
 };
 
 const reportLinks: Array<[Kind, string, string]> = [
@@ -75,6 +88,7 @@ const reportLinks: Array<[Kind, string, string]> = [
     ["active-users", "/laporan/pengguna-aktif", "Pengguna Aktif"],
     ["borrowed-items", "/laporan/item-dipinjam", "Item Dipinjam"],
     ["audits", "/laporan/audit", "Audit"],
+    ["cases", "/laporan/kasus", "Kasus"],
 ];
 
 export default function ReportDetail({
@@ -213,6 +227,13 @@ function Summary({
             ["types", "Jenis Alat", ListTree],
             ["units", "Unit Dipinjam", Boxes],
             ["overdue", "Terlambat", ShieldAlert],
+        ],
+        cases: [
+            ["total", "Total Kasus", ShieldAlert],
+            ["open", "Belum Selesai", ClipboardList],
+            ["completed", "Selesai", PackageCheck],
+            ["damaged", "Rusak", Wrench],
+            ["lost", "Hilang", ShieldAlert],
         ],
     };
     return (
@@ -465,6 +486,80 @@ function ReportRows({ kind, rows }: { kind: Kind; rows: any[] }) {
             ["Tenggat", (r) => formatDate(r.due_date)],
             ["Status", (r) => <StatusBadge status={r.status} />],
         ],
+        cases: [
+            [
+                "Nomor Kasus",
+                (r) => (
+                    <Link
+                        href={`/kasus/${r.id}`}
+                        className="font-num font-bold text-green hover:underline"
+                    >
+                        {r.case_no}
+                    </Link>
+                ),
+            ],
+            [
+                "Kasus / Unit",
+                (r) => (
+                    <>
+                        <strong className="capitalize">{r.type}</strong>
+                        <small className="block text-muted">
+                            {r.unit?.tool_type?.name ?? "Alat tidak diketahui"}
+                        </small>
+                        <small className="block font-num text-muted">
+                            {r.unit?.asset_code ?? "—"}
+                        </small>
+                    </>
+                ),
+            ],
+            [
+                "Penanggung Jawab",
+                (r) => (
+                    <>
+                        <strong>{r.responsible_user?.name ?? "—"}</strong>
+                        <small className="block text-muted">
+                            {r.responsible_user?.institution ?? "Tanpa institusi"}
+                        </small>
+                    </>
+                ),
+            ],
+            [
+                "Transaksi",
+                (r) =>
+                    r.loan ? (
+                        <Link
+                            href={`/peminjaman/${r.loan.id}`}
+                            className="font-num font-bold text-green hover:underline"
+                        >
+                            {r.loan.trx_no}
+                        </Link>
+                    ) : (
+                        "—"
+                    ),
+            ],
+            ["Tahap", (r) => <StatusBadge status={r.stage} />],
+            [
+                "Penyelesaian",
+                (r) => <StatusBadge status={r.resolution_status} />,
+            ],
+            [
+                "Dokumen",
+                (r) => (
+                    <div className="space-y-1 text-xs">
+                        <DocumentStatus label="Bukti" complete={r.has_evidence} />
+                        <DocumentStatus
+                            label="Berita Acara"
+                            complete={r.has_berita_acara}
+                        />
+                        <DocumentStatus
+                            label="Keputusan"
+                            complete={r.has_decision}
+                        />
+                    </div>
+                ),
+            ],
+            ["Dibuat", (r) => formatDate(r.created_at)],
+        ],
     };
     const selected = columns[kind];
     return (
@@ -495,6 +590,21 @@ function ReportRows({ kind, rows }: { kind: Kind; rows: any[] }) {
                 </tbody>
             </table>
         </div>
+    );
+}
+
+function DocumentStatus({
+    label,
+    complete,
+}: {
+    label: string;
+    complete: boolean;
+}) {
+    return (
+        <p className={complete ? "text-green" : "text-muted"}>
+            <span className="mr-1 font-bold">{complete ? "✓" : "—"}</span>
+            {label}
+        </p>
     );
 }
 

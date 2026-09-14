@@ -594,7 +594,8 @@ class ToolsAssetWorkflowTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Operations/Reports')
                 ->where('counts.active_users', fn ($value) => (int) $value > 0)
-                ->where('counts.borrowed_items', fn ($value) => (int) $value > 0));
+                ->where('counts.borrowed_items', fn ($value) => (int) $value > 0)
+                ->where('counts.cases', fn ($value) => (int) $value > 0));
 
         $this->get(route('reports.active-users'))
             ->assertOk()
@@ -628,6 +629,20 @@ class ToolsAssetWorkflowTest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
         $this->get(route('reports.export', 'borrowed-items'))
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
+        $this->get(route('reports.cases'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Operations/ReportDetail')
+                ->where('kind', 'cases')
+                ->has('rows', fn (Assert $rows) => $rows
+                    ->each(fn (Assert $row) => $row
+                        ->hasAll(['id', 'case_no', 'type', 'stage', 'unit', 'responsible_user', 'resolution_status'])
+                        ->etc())));
+
+        $this->get(route('reports.export', 'cases'))
             ->assertOk()
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AssetCase;
 use App\Models\Loan;
 use App\Models\StockAudit;
 use App\Models\ToolUnit;
@@ -24,6 +25,7 @@ class ReportController extends Controller
                 'audits' => StockAudit::count(),
                 'active_users' => $activeLoans->pluck('borrower_id')->unique()->count(),
                 'borrowed_items' => $activeLoans->sum(fn (Loan $loan) => $loan->items->count()),
+                'cases' => AssetCase::count(),
             ],
         ]);
     }
@@ -109,9 +111,31 @@ class ReportController extends Controller
         ]);
     }
 
+    public function cases()
+    {
+        $rows = AssetCase::with([
+            'unit.toolType:id,code,name',
+            'loan:id,trx_no',
+            'responsibleUser:id,name,institution',
+            'replacementUnit:id,asset_code',
+        ])->latest('created_at')->get();
+
+        return Inertia::render('Operations/ReportDetail', [
+            'kind' => 'cases',
+            'summary' => [
+                'total' => $rows->count(),
+                'open' => $rows->where('stage', '!=', 'selesai')->count(),
+                'completed' => $rows->where('stage', 'selesai')->count(),
+                'damaged' => $rows->where('type', 'rusak')->count(),
+                'lost' => $rows->where('type', 'hilang')->count(),
+            ],
+            'rows' => $rows,
+        ]);
+    }
+
     public function export(Request $request, string $type)
     {
-        abort_unless(in_array($type, ['assets', 'loans', 'audits', 'active-users', 'borrowed-items'], true), 404);
+        abort_unless(in_array($type, ['assets', 'loans', 'audits', 'active-users', 'borrowed-items', 'cases'], true), 404);
         [$headers, $rows] = match ($type) {
             'assets' => [['Kode Aset', 'Jenis', 'Status', 'Kondisi', 'Lokasi', 'Owner'], ToolUnit::with(['toolType', 'location'])->get()->map(fn ($x) => [$x->asset_code, $x->toolType->name, $x->status, $x->condition, $x->location?->name, $x->owner])],
             'loans' => [['Transaksi', 'Peminjam', 'Area', 'Tujuan', 'Mulai', 'Tenggat', 'Status', 'Token'], Loan::with('borrower')->get()->map(fn ($x) => [$x->trx_no, $x->borrower->name, $x->usage_type, $x->purpose, $x->start_date, $x->due_date, $x->status, $x->tokens_used])],
@@ -154,6 +178,26 @@ class ReportController extends Controller
                     $loan->due_date,
                     $loan->status,
                 ]))],
+            'cases' => [['Nomor Kasus', 'Jenis', 'Tahap', 'Kode Unit', 'Nama Alat', 'Transaksi', 'Penanggung Jawab', 'Institusi', 'Penyelesaian', 'Bukti', 'Berita Acara', 'Keputusan', 'Tanggal Dibuat', 'Tanggal Ditutup'], AssetCase::with([
+                'unit.toolType:id,name',
+                'loan:id,trx_no',
+                'responsibleUser:id,name,institution',
+            ])->latest('created_at')->get()->map(fn ($case) => [
+                $case->case_no,
+                $case->type,
+                $case->stage,
+                $case->unit?->asset_code,
+                $case->unit?->toolType?->name,
+                $case->loan?->trx_no,
+                $case->responsibleUser?->name,
+                $case->responsibleUser?->institution,
+                $case->resolution_status,
+                $case->has_evidence ? 'Lengkap' : 'Belum',
+                $case->has_berita_acara ? 'Lengkap' : 'Belum',
+                $case->has_decision ? 'Lengkap' : 'Belum',
+                $case->created_at,
+                $case->closed_at,
+            ])],
         };
 
         return response()->streamDownload(function () use ($headers, $rows) {

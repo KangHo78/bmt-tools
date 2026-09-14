@@ -58,6 +58,15 @@ const reports = [
         icon: ScanLine,
         accent: "bg-red",
     },
+    {
+        key: "cases",
+        href: "/laporan/kasus",
+        label: "Laporan Kasus",
+        description:
+            "Kasus kerusakan dan kehilangan beserta progres penyelesaiannya.",
+        icon: AlertTriangle,
+        accent: "bg-red",
+    },
 ] as const;
 
 const recommendations = [
@@ -65,11 +74,6 @@ const recommendations = [
         icon: Wrench,
         label: "Pemeliharaan & Biaya",
         note: "jadwal, downtime, vendor, dan total biaya",
-    },
-    {
-        icon: AlertTriangle,
-        label: "Kerusakan & Kehilangan",
-        note: "kasus, penyelesaian, dan aset pengganti",
     },
     {
         icon: FileClock,
@@ -150,7 +154,7 @@ export default function Reports({
                         </h2>
                         <p className="mt-3 max-w-md text-sm leading-relaxed text-white/60">
                             Data dasarnya sudah dicatat oleh modul operasional.
-                            Empat laporan ini paling masuk akal untuk tahap
+                            Tiga laporan ini paling masuk akal untuk tahap
                             berikutnya.
                         </p>
                     </div>
